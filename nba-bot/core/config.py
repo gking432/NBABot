@@ -74,7 +74,11 @@ HEAVY_FAVORITE_BANKROLL_PCT = 0.10      # 10%
 # ─────────────────────────────────────────────
 
 CONS_MIN_DEFICIT_VS_SPREAD = 12
+CONS_MIN_SPREAD = 1.0            # Allow regime-aware Conservative filtering by edge
 CONS_MIN_EDGE_PCT = 0.08           # 8% minimum edge (fair_value - kalshi_price/100)
+CONS_CLOSE_SPREAD_MAX = 3.5
+CONS_CLOSE_MIN_EDGE_PCT = 0.13     # Require higher edge in close-spread games
+CONS_MID_MIN_EDGE_PCT = 0.10       # Moderate edge for mid spread games
 CONS_MAX_ENTRY_PRICE_CENTS = 35    # Won't buy above 35¢
 CONS_MIN_BOOK_DEPTH = 100          # Minimum contracts at the ask
 CONS_MAX_ENTRY_QUARTER = 2         # No entries after Q2
@@ -104,6 +108,7 @@ CONS_MAX_CONCURRENT_POSITIONS = 2
 
 TIER_MIN_SPREAD = 1                # Pre-game spread at least 1
 TIER_MAX_SPREAD = 7                # Pre-game spread at most 7
+TIER_CLOSE_SPREAD_MAX = 3.5        # <=3.5 treated as close-spread scalp regime
 TIER_MIN_DEFICIT_VS_SPREAD = 10
 TIER_MIN_PRICE_DROP_PCT = 0.25     # 25% drop from tipoff price
 TIER_MAX_ENTRY_PRICE_CENTS = 35    # Won't buy above 35¢
@@ -116,6 +121,7 @@ TIER_ENTRY2_MIN_ADDITIONAL_DEFICIT = 8       # Deficit must grow by 8+ since Ent
 TIER_ENTRY2_MIN_TIME_LEFT_Q2_SEC = 360       # At least 6 min left in Q2 for Entry 2
 TIER_ENTRY34_MIN_ADDITIONAL_DROP_PCT = 0.25  # Same for Entry 3/4
 TIER_ENTRY4_MIN_TIME_LEFT_Q2_SEC = 480       # At least 8 min left in Q2 for Entry 4
+TIER_ENTRY3_MIN_SPREAD = 6.0                 # Entry 3/4 only in stronger spread regime
 
 # Tiered position sizing (% of tiered bankroll)
 TIER_GAME_BUDGET_PCT = 0.24        # 24% game budget, split 50/50 for Entry 1 & 2
@@ -123,13 +129,25 @@ TIER_NUCLEAR_BUDGET_PCT = 0.24     # 24% nuclear reserve for Entry 3 & 4
 TIER_MAX_PER_GAME_PCT = 0.48       # 48% max total per game
 
 # ─── Quick Scalp Exit System ───
-TIER_SCALP_PROFIT_PCT = 0.175        # Sell 50% at +17.5% (midpoint of 15-20%)
-TIER_SCALP_PARTIAL_SELL_PCT = 0.50   # Sell half at first profit target
-TIER_SCALP_PRICE_TARGET_CENTS = 40   # Low-avg path: sell remaining when price hits 40¢
-TIER_SCALP_HIGH_AVG_TARGET_CENTS = 48  # High-avg path: sell all at 48¢; also the basis for dynamic stop
-TIER_SCALP_AVG_COST_THRESHOLD = 30   # Below 30¢ avg = 2-stage exit; above = 48¢ target
-TIER_SCALP_RECOVERY_ENTRIES = 3      # 3+ entries = capital recovery mode (sell at breakeven)
-TIER_TIME_EXIT_Q4_SEC = 300          # Force exit with < 5 min left in Q4
+TIER_SCALP_PROFIT_PCT = 0.175      # Sell 50% at +17.5%
+TIER_SCALP_PARTIAL_SELL_PCT = 0.50
+TIER_SCALP_PRICE_TARGET_CENTS = 40
+TIER_SCALP_HIGH_AVG_TARGET_CENTS = 48
+TIER_SCALP_AVG_COST_THRESHOLD = 30
+TIER_SCALP_RECOVERY_ENTRIES = 3
+TIER_SCALP_RECOVERY_STOP_LOSS_PCT = 0.50  # Hard stop for 3+ entry recovery positions
+
+# Close-spread scalp geometry (spread <= 3.5)
+TIER_CLOSE_MAX_ENTRIES = 2
+TIER_CLOSE_TP1_ADD_CENTS = 6
+TIER_CLOSE_TP2_ADD_CENTS = 10
+TIER_CLOSE_TP2_CEILING_CENTS = 42
+TIER_CLOSE_STOP_LOSS_PCT = 0.18
+TIER_CLOSE_TIME_EXIT_Q3_SEC = 300
+
+# Universal per-position tail cap
+TIER_MAX_POSITION_LOSS_PCT = 0.40
+TIER_TIME_EXIT_Q4_SEC = 300
 
 # Tiered limits
 TIER_MAX_CONCURRENT_POSITIONS = 3
@@ -141,13 +159,13 @@ TIER_MAX_CONCURRENT_POSITIONS = 3
 
 TIER_CLASSIC_MAX_ENTRY_PRICE_CENTS = 40    # Original 40¢ cap
 
-# Classic exits (fixed multipliers)
-TIER_CLASSIC_CAPITAL_RECOVERY_MULT = 1.75
-TIER_CLASSIC_CAPITAL_RECOVERY_SELL_PCT = 0.40
-TIER_CLASSIC_HOUSE_MONEY_1_MULT = 3.0
+# Classic exits (reachable staged multipliers)
+TIER_CLASSIC_CAPITAL_RECOVERY_MULT = 1.5
+TIER_CLASSIC_CAPITAL_RECOVERY_SELL_PCT = 0.50
+TIER_CLASSIC_HOUSE_MONEY_1_MULT = 2.0
 TIER_CLASSIC_HOUSE_MONEY_1_SELL_PCT = 0.25
-TIER_CLASSIC_HOUSE_MONEY_2_MULT = 5.0
-TIER_CLASSIC_HOUSE_MONEY_2_SELL_PCT = 0.30
+TIER_CLASSIC_HOUSE_MONEY_2_MULT = 2.2
+TIER_CLASSIC_HOUSE_MONEY_2_SELL_PCT = 0.25
 TIER_CLASSIC_LATE_GAME_PRICE_CENTS = 80
 TIER_CLASSIC_LATE_GAME_SELL_PCT = 0.60
 TIER_CLASSIC_TRAILING_STOP_PCT = 0.50
@@ -156,6 +174,8 @@ TIER_CLASSIC_TRAILING_STOP_PCT = 0.50
 TIER_CLASSIC_DEFENSIVE_HARD_FLOOR_PCT = 0.15
 TIER_CLASSIC_UNIVERSAL_STOP_PCT = 0.50    # -50% unrealized loss = sell all (Q3+ only)
 TIER_CLASSIC_RECOVERY_ENTRIES = 3         # 3+ entries = capital recovery (sell at breakeven)
+TIER_CLASSIC_RECOVERY_STOP_LOSS_PCT = 0.50
+TIER_CLASSIC_MAX_POSITION_LOSS_PCT = 0.45
 
 # Classic limits
 TIER_CLASSIC_MAX_CONCURRENT_POSITIONS = 3
@@ -189,6 +209,8 @@ HF_TRAILING_STOP_PCT = 0.40        # 40% from peak (tighter than tiered)
 
 # Heavy favorite stop loss
 HF_DEFENSIVE_HARD_FLOOR_PCT = 0.15
+HF_MAX_POSITION_LOSS_PCT = 0.45      # Universal hard stop for heavy favorite positions
+HF_ENTRY3_MIN_SPREAD = 10            # Entry 3/4 only for very strong favorites
 
 # Heavy favorite limits
 HF_MAX_CONCURRENT_POSITIONS = 2

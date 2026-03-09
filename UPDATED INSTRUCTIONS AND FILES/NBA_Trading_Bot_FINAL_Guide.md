@@ -4,6 +4,30 @@
 
 ---
 
+## ⚠️ 2026 Strategy Update (Canonical Behavior)
+
+To prevent drift/confusion, the current bot behavior now follows the **regime-aware** strategy model implemented in code:
+
+- **Tiered V2 is regime-aware**:
+  - `opening_spread <= 3.5` → close-spread scalp mode (max 2 entries, avg-relative TP/SL/time-stop)
+  - `opening_spread > 3.5` → recovery mode with stricter Entry 3+ gating and explicit tail-loss caps
+- **Tiered Classic has reachable exits** (`1.5x / 2.0x / 2.2x`) and explicit recovery/tail stops.
+- **Conservative uses spread-aware edge thresholds** (higher required edge in close spreads).
+- **Heavy Favorite enforces universal tail-loss cap** and Entry 3+ spread gating.
+- **Weekly governance scorecard** is part of the core workflow via `nba-bot/tools/weekly_scorecard.py` with outputs:
+  - `nba-bot/docs/weekly_scorecard.md`
+  - `nba-bot/docs/weekly_scorecard.json`
+
+### Canonical source of truth
+For active strategy rules and paper-trading governance protocol, use:
+- `nba-bot/docs/STRATEGY_PHASES_IMPLEMENTATION.md`
+- `nba-bot/core/config.py`
+- `nba-bot/strategies/*.py`
+
+This document remains useful as full-system background, but if any section conflicts with the files above, treat the files above as authoritative.
+
+---
+
 ## TABLE OF CONTENTS
 
 1. Architecture Overview

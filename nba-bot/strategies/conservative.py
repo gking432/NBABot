@@ -11,7 +11,8 @@ from core.models import (
     LiveGameState, EntrySignal, Position, Strategy, GameMode
 )
 from core.config import (
-    CONS_MIN_DEFICIT_VS_SPREAD, CONS_MIN_EDGE_PCT,
+    CONS_MIN_DEFICIT_VS_SPREAD, CONS_MIN_SPREAD, CONS_MIN_EDGE_PCT,
+    CONS_CLOSE_SPREAD_MAX, CONS_CLOSE_MIN_EDGE_PCT, CONS_MID_MIN_EDGE_PCT,
     CONS_MAX_ENTRY_PRICE_CENTS, CONS_MIN_BOOK_DEPTH,
     CONS_MAX_ENTRY_QUARTER,
     CONS_SIZE_EDGE_8_10, CONS_SIZE_EDGE_10_12, CONS_SIZE_EDGE_12_PLUS,
@@ -56,20 +57,30 @@ class ConservativeStrategy(BaseStrategy):
         if state.quarter > CONS_MAX_ENTRY_QUARTER:
             return None
 
-        # 2. Deficit vs spread must be >= 12
+        # 2. Pre-game spread must be large enough (avoid coin-flip games)
+        if state.opening_spread < CONS_MIN_SPREAD:
+            return None
+
+        # 3. Deficit vs spread must be >= 12
         if state.deficit_vs_spread < CONS_MIN_DEFICIT_VS_SPREAD:
             return None
 
-        # 3. Edge must be >= 8%
-        if state.edge_conservative is None or state.edge_conservative < CONS_MIN_EDGE_PCT:
+        # 4. Edge must be >= spread-regime threshold
+        edge_threshold = CONS_MIN_EDGE_PCT
+        if state.opening_spread <= CONS_CLOSE_SPREAD_MAX:
+            edge_threshold = CONS_CLOSE_MIN_EDGE_PCT
+        elif state.opening_spread <= 7:
+            edge_threshold = CONS_MID_MIN_EDGE_PCT
+
+        if state.edge_conservative is None or state.edge_conservative < edge_threshold:
             return None
 
-        # 4. Kalshi ask price <= 35¢
+        # 5. Kalshi ask price <= 35¢
         ask_price = state.kalshi_yes_ask
         if ask_price is None or ask_price > CONS_MAX_ENTRY_PRICE_CENTS:
             return None
 
-        # 5. Order book depth >= 100
+        # 6. Order book depth >= 100
         if state.kalshi_book_depth < CONS_MIN_BOOK_DEPTH:
             return None
 
@@ -92,7 +103,7 @@ class ConservativeStrategy(BaseStrategy):
             return None
 
         reason = (
-            f"Conservative entry: edge={edge:.1%}, deficit_vs_spread={state.deficit_vs_spread:.1f}, "
+            f"Conservative entry: edge={edge:.1%} (min {edge_threshold:.1%}), deficit_vs_spread={state.deficit_vs_spread:.1f}, "
             f"price={ask_price}¢, fair_value={state.fair_value_home:.3f}, "
             f"Q{state.quarter} {state.time_remaining_seconds // 60}:{state.time_remaining_seconds % 60:02d}"
         )

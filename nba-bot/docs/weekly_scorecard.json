@@ -1,0 +1,91 @@
+{
+  "by_strategy": {
+    "TIERED_CLASSIC": {
+      "n_positions": 7,
+      "pnl_cents": -1281,
+      "wins": 3,
+      "losses": 4,
+      "avg_win_cents": 2226.3333333333335,
+      "avg_loss_cents": 1990,
+      "profit_factor": 0.839070351758794,
+      "expectancy_cents": -183.0
+    },
+    "TIERED": {
+      "n_positions": 6,
+      "pnl_cents": -2290,
+      "wins": 3,
+      "losses": 3,
+      "avg_win_cents": 1054,
+      "avg_loss_cents": 1817.3333333333333,
+      "profit_factor": 0.5799706529713866,
+      "expectancy_cents": -381.6666666666667
+    },
+    "CONSERVATIVE": {
+      "n_positions": 4,
+      "pnl_cents": -1468,
+      "wins": 1,
+      "losses": 3,
+      "avg_win_cents": 1152,
+      "avg_loss_cents": 873.3333333333334,
+      "profit_factor": 0.4396946564885496,
+      "expectancy_cents": -367.0
+    }
+  },
+  "by_spread": {
+    "<=3.5": {
+      "n_positions": 10,
+      "pnl_cents": -8751,
+      "wins": 3,
+      "losses": 7,
+      "avg_win_cents": 1553.6666666666667,
+      "avg_loss_cents": 1916,
+      "profit_factor": 0.34752460483149417,
+      "expectancy_cents": -875.1
+    },
+    ">=8": {
+      "n_positions": 4,
+      "pnl_cents": -1468,
+      "wins": 1,
+      "losses": 3,
+      "avg_win_cents": 1152,
+      "avg_loss_cents": 873.3333333333334,
+      "profit_factor": 0.4396946564885496,
+      "expectancy_cents": -367.0
+    },
+    "3.5-8": {
+      "n_positions": 3,
+      "pnl_cents": 5180,
+      "wins": 3,
+      "losses": 0,
+      "avg_win_cents": 1726.6666666666667,
+      "avg_loss_cents": 0.0,
+      "profit_factor": 0.0,
+      "expectancy_cents": 1726.6666666666667
+    }
+  },
+  "by_entry_bucket": {
+    "1": {
+      "n_positions": 15,
+      "pnl_cents": 3032,
+      "wins": 7,
+      "losses": 8,
+      "avg_win_cents": 1570.4285714285713,
+      "avg_loss_cents": 995.125,
+      "profit_factor": 1.3808566762969476,
+      "expectancy_cents": 202.13333333333333
+    },
+    "3+": {
+      "n_positions": 2,
+      "pnl_cents": -8071,
+      "wins": 0,
+      "losses": 2,
+      "avg_win_cents": 0.0,
+      "avg_loss_cents": 4035.5,
+      "profit_factor": 0.0,
+      "expectancy_cents": -4035.5
+    }
+  },
+  "recommendations": [
+    "Close-spread bucket expectancy is negative with meaningful sample; keep scalp-only regime, cap entries at 2, reduce sizing 25%."
+  ]
+}

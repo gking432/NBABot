@@ -20,6 +20,7 @@ from core.config import (
     HF_HOUSE_MONEY_1_MULT, HF_HOUSE_MONEY_1_SELL_PCT,
     HF_HOUSE_MONEY_2_PRICE_CENTS, HF_HOUSE_MONEY_2_SELL_PCT,
     HF_TRAILING_STOP_PCT, HF_DEFENSIVE_HARD_FLOOR_PCT,
+    HF_MAX_POSITION_LOSS_PCT, HF_ENTRY3_MIN_SPREAD,
     TIER_ENTRY2_MIN_ADDITIONAL_DROP_PCT,
     TIER_MIN_BOOK_DEPTH, TIER_ENTRY2_MIN_TIME_LEFT_Q2_SEC,
     TIER_ENTRY4_MIN_TIME_LEFT_Q2_SEC,
@@ -163,6 +164,9 @@ class HeavyFavoriteStrategy(BaseStrategy):
         if price_drop_since_last < TIER_ENTRY2_MIN_ADDITIONAL_DROP_PCT:
             return None
 
+        if next_entry >= 3 and state.opening_spread < HF_ENTRY3_MIN_SPREAD:
+            return None
+
         if state.kalshi_book_depth < TIER_MIN_BOOK_DEPTH:
             return None
 
@@ -223,6 +227,19 @@ class HeavyFavoriteStrategy(BaseStrategy):
         position.current_mode = self.determine_game_mode(state, position)
 
         gain_multiple = current_price / avg_cost
+
+        universal_stop_price = avg_cost * (1 - HF_MAX_POSITION_LOSS_PCT)
+        if current_price <= universal_stop_price:
+            loss_pct = (avg_cost - current_price) / avg_cost
+            return {
+                "action": "SELL_ALL",
+                "shares": position.shares_remaining,
+                "price_cents": current_price,
+                "reason": (
+                    f"HF universal tail stop: {current_price}¢ <= {universal_stop_price:.0f}¢ "
+                    f"(-{loss_pct:.0%} from avg {avg_cost:.0f}¢)"
+                ),
+            }
 
         # ═══════════════════════════════════════
         # PROFITABLE EXITS (Patient House Money)
