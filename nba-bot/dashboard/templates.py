@@ -412,18 +412,20 @@ def render_dashboard() -> str:
                 targets.push({ label: 'TP1 (+30%)', price: Math.round(avg * 1.30), hit: false });
                 targets.push({ label: 'TP2 (+60%)', price: Math.round(avg * 1.60), hit: false });
             } else if (strat === 'TIERED') {
-                let mult = 1.5, sellPct = '40%';
-                if (avg <= 14) { mult = 3.0; sellPct = '18%'; }
-                else if (avg <= 19) { mult = 2.5; sellPct = '22%'; }
-                else if (avg <= 24) { mult = 2.0; sellPct = '28%'; }
-                else if (avg <= 29) { mult = 1.75; sellPct = '33%'; }
-                targets.push({ label: 'Recovery (' + mult + 'x)', price: Math.round(avg * mult), hit: pos.capital_recovered });
-                targets.push({ label: 'HM1 (65¢)', price: 65, hit: pos.house_money_1_hit });
-                targets.push({ label: 'HM2 (82¢)', price: 82, hit: pos.house_money_2_hit });
+                if ((pos.entry_count || 0) >= 3) {
+                    targets.push({ label: 'Recovery Exit (breakeven)', price: Math.round(avg), hit: false });
+                    targets.push({ label: 'Recovery Stop (-50%)', price: Math.round(avg * 0.5), hit: false });
+                } else if (avg < 30) {
+                    targets.push({ label: 'TP1 (+17.5%)', price: Math.round(avg * 1.175), hit: pos.capital_recovered });
+                    targets.push({ label: 'TP2 (40¢)', price: 40, hit: false });
+                } else {
+                    targets.push({ label: 'TP (48¢)', price: 48, hit: false });
+                }
             } else if (strat === 'TIERED_CLASSIC') {
-                targets.push({ label: 'Recovery (1.75x)', price: Math.round(avg * 1.75), hit: pos.capital_recovered });
-                targets.push({ label: 'HM1 (3x)', price: Math.round(avg * 3.0), hit: pos.house_money_1_hit });
-                targets.push({ label: 'HM2 (5x)', price: Math.round(avg * 5.0), hit: pos.house_money_2_hit });
+                targets.push({ label: 'Recovery (1.5x)', price: Math.round(avg * 1.5), hit: pos.capital_recovered });
+                targets.push({ label: 'HM1 (2.0x)', price: Math.round(avg * 2.0), hit: pos.house_money_1_hit });
+                targets.push({ label: 'HM2 (2.2x)', price: Math.round(avg * 2.2), hit: pos.house_money_2_hit });
+                targets.push({ label: 'Late Lock (80¢)', price: 80, hit: false });
             } else if (strat === 'HEAVY_FAVORITE') {
                 targets.push({ label: 'Recovery (2x)', price: Math.round(avg * 2.0), hit: pos.capital_recovered });
                 targets.push({ label: 'HM1 (3x)', price: Math.round(avg * 3.0), hit: pos.house_money_1_hit });
@@ -1028,333 +1030,90 @@ def render_dashboard() -> str:
             const el = document.getElementById('tabStrategyGuide');
             if (!el) return;
             el.innerHTML = `
-
-<!-- ═══════════ OVERVIEW ═══════════ -->
 <div class="card guide-section">
-    <h2>How This Bot Works</h2>
-    <p>This bot trades NBA "winner" prediction markets on Kalshi. It buys YES contracts on the pre-game favorite
-    when that team falls behind early in the game, betting on a comeback. Contracts pay $1.00 if the team wins
-    and $0.00 if they lose.</p>
-    <p>The bot runs four strategies simultaneously, each with its own bankroll allocation, entry criteria, and
-    exit rules. All entries are restricted to Q1 and Q2 &mdash; once halftime hits, no new positions are opened.
-    Exits are managed automatically based on price targets, stop losses, and game clock.</p>
+    <h2>Strategy Guide (Source of Truth)</h2>
+    <p>This tab mirrors the live code in <code>core/config.py</code> and <code>strategies/*.py</code>. The bot runs four strategies at once with bankroll split: Conservative 30%, Tiered V2 30%, Tiered Classic 30%, Heavy Favorite 10%.</p>
+    <p>Global behavior: entries only in Q1-Q2, no new entries in final 2 minutes, Q3 has a neutral window before defensive mode, and each strategy has per-position tail-risk stops.</p>
+</div>
 
-    <h3>Bankroll Allocation</h3>
-    <div class="guide-grid">
-        <div class="guide-param"><span class="label">Conservative:</span> <span class="value">30% ($150)</span></div>
-        <div class="guide-param"><span class="label">Tiered (Quick Scalp):</span> <span class="value">30% ($150)</span></div>
-        <div class="guide-param"><span class="label">Tiered Classic:</span> <span class="value">30% ($150)</span></div>
-        <div class="guide-param"><span class="label">Heavy Favorite:</span> <span class="value">10% ($50)</span></div>
-    </div>
+<hr class="guide-divider">
 
-    <h3>Key Concepts</h3>
+<div class="card guide-section">
+    <h2 style="color:var(--conservative)">Conservative (Regime-Aware Edge)</h2>
     <ul>
-        <li><strong>Deficit vs Spread</strong> &mdash; How much worse the favorite is doing compared to what Vegas expected. A spread of -5 means Vegas expected the favorite to win by 5. If the favorite is currently losing by 8, the deficit vs spread is 13. Higher = more panic = cheaper contracts.</li>
-        <li><strong>Price Drop from Tipoff</strong> &mdash; How far the Kalshi contract price has fallen since the game started. A 25% drop means the market now prices the favorite's win probability 25% lower than at tip-off.</li>
-        <li><strong>Edge</strong> &mdash; The gap between the Vegas-implied fair value and the current Kalshi price. If Vegas says 45% chance but Kalshi is selling at 30&cent;, the edge is +15%.</li>
-        <li><strong>Book Depth</strong> &mdash; Number of contracts available at the current ask price. Ensures there's enough liquidity to fill the order without excessive slippage.</li>
-        <li><strong>Game Modes</strong> &mdash; Q1-Q2 = Offensive (buy). Early Q3 = Neutral (hold). Late Q3/Q4 while underwater = Defensive (look to exit).</li>
+        <li>Entry gates: spread &ge; 1, deficit_vs_spread &ge; 12, ask &le; 35&cent;, depth &ge; 100, Q1-Q2 only.</li>
+        <li>Edge threshold is spread-aware: close spread (&le; 3.5) needs 13%+, mid spread (&le; 7) needs 10%+, otherwise 8%+.</li>
+        <li>Sizing: 8% / 12% / 16% of conservative bankroll by edge bucket.</li>
+        <li>Exits: TP1 +30% (sell 50%), TP2 +60% (sell rest), -30% stop with 12-minute hold guard, thesis invalidation (deficit &gt; 25 in Q3+ late clock).</li>
+        <li>Max concurrent positions: 2.</li>
     </ul>
 </div>
 
 <hr class="guide-divider">
 
-<!-- ═══════════ CONSERVATIVE ═══════════ -->
 <div class="card guide-section">
-    <h2 style="color:var(--conservative)">Strategy 1: Conservative</h2>
-    <div class="guide-subtitle">Edge-based. Only enters when Kalshi is provably mispriced vs Vegas consensus.</div>
-
-    <h3>Philosophy</h3>
-    <p>The safest strategy. It only buys when the math shows a clear discrepancy between what Vegas thinks and
-    what Kalshi is pricing. Single entry per game, no averaging down. Mechanical profit-taking in two stages.</p>
-
-    <h3><span class="guide-badge entry">ENTRY</span> Entry Conditions (all must be true)</h3>
+    <h2 style="color:var(--tiered)">Tiered V2 (Regime-Aware)</h2>
     <ul>
-        <li>Quarter 1 or 2 only</li>
-        <li>Deficit vs spread &ge; 12</li>
-        <li>Edge &ge; 8% (Vegas fair value minus Kalshi price)</li>
-        <li>Kalshi ask price &le; 35&cent;</li>
-        <li>Order book depth &ge; 100 contracts</li>
-    </ul>
-
-    <h3>Position Sizing (% of conservative bankroll)</h3>
-    <div class="guide-grid">
-        <div class="guide-param"><span class="label">Edge 8-10%:</span> <span class="value">8% of bankroll</span></div>
-        <div class="guide-param"><span class="label">Edge 10-12%:</span> <span class="value">12% of bankroll</span></div>
-        <div class="guide-param"><span class="label">Edge 12%+:</span> <span class="value">16% of bankroll</span></div>
-    </div>
-
-    <h3><span class="guide-badge exit">EXIT</span> Exit Rules</h3>
-    <ul>
-        <li><strong>Take Profit 1:</strong> Sell 50% of shares at +30% gain</li>
-        <li><strong>Take Profit 2:</strong> Sell remaining shares at +60% gain</li>
-        <li><strong>Stop Loss:</strong> Sell all at -30%, but only after holding for 12+ minutes AND the deficit is still &ge; 12 (if deficit is shrinking, the thesis may still be alive)</li>
-        <li><strong>Thesis Invalid:</strong> Sell all if deficit exceeds 25, it's Q3+, and less than 8 minutes remain (the game is out of reach)</li>
-    </ul>
-
-    <div class="guide-example">
-        <div class="heading">Example Trade</div>
-        Vegas has the Celtics as -5 favorites. Mid Q1, the Hornets go on a run and lead by 8. Deficit vs spread = 13.
-        Vegas fair value says 42% Celtics win, but Kalshi is selling at 30&cent; (edge = 12%). Bot buys at 30&cent;.
-        Celtics rally in Q2, price climbs to 39&cent; (+30%) &rarr; sell half. Later hits 48&cent; (+60%) &rarr; sell the rest.
-    </div>
-
-    <h3>Limits</h3>
-    <div class="guide-grid">
-        <div class="guide-param"><span class="label">Max concurrent positions:</span> <span class="value">2</span></div>
-        <div class="guide-param"><span class="label">Entries per game:</span> <span class="value">1 (no averaging)</span></div>
-    </div>
-</div>
-
-<hr class="guide-divider">
-
-<!-- ═══════════ TIERED (QUICK SCALP) ═══════════ -->
-<div class="card guide-section">
-    <h2 style="color:var(--tiered)">Strategy 2: Tiered (Quick Scalp)</h2>
-    <div class="guide-subtitle">Buy the dip on close-spread favorites. Quick profit targets with a 2:1 reward/risk dynamic stop loss. Only need to win 1 out of 3 to be profitable.</div>
-
-    <h3>Philosophy</h3>
-    <p>The core money-maker. When a close-spread favorite (spread 1-7) gets punched early in the game, their
-    Kalshi price dumps to bargain levels. We buy in stages as the price falls, then sell when the team makes
-    any sort of comeback and the price bounces. The goal is consistent 10-20% gains with losses capped at half
-    the potential gain &mdash; meaning we only need a 33% win rate to break even.</p>
-
-    <h3><span class="guide-badge entry">ENTRY</span> Entry 1 Conditions (all must be true)</h3>
-    <ul>
-        <li>Quarter 1 or 2 only</li>
-        <li>Pre-game spread between 1 and 7 points</li>
-        <li>Deficit vs spread &ge; 10</li>
-        <li>Price dropped &ge; 25% from tipoff</li>
-        <li>Kalshi ask price &le; 35&cent;</li>
-        <li>Order book depth &ge; 50 contracts</li>
-    </ul>
-
-    <h3><span class="guide-badge entry">ENTRY</span> Entries 2-4 (Averaging Down)</h3>
-    <p>If the price keeps dropping, the bot buys more to lower the average cost. Each additional entry requires
-    the price to have fallen at least 25% further from the previous entry.</p>
-    <ul>
-        <li><strong>Entry 2:</strong> Price dropped 25%+ from Entry 1, deficit grew by 8+, at least 6 min left in Q2</li>
-        <li><strong>Entry 3-4:</strong> Price dropped 25%+ from previous entry, at least 8 min left in Q2 for Entry 4</li>
-    </ul>
-
-    <h3>Position Sizing</h3>
-    <div class="guide-grid">
-        <div class="guide-param"><span class="label">Entry 1:</span> <span class="value">12% of bankroll (half of 24% game budget)</span></div>
-        <div class="guide-param"><span class="label">Entry 2:</span> <span class="value">12% of bankroll (other half of game budget)</span></div>
-        <div class="guide-param"><span class="label">Entry 3:</span> <span class="value">12% of bankroll (half of 24% nuclear reserve)</span></div>
-        <div class="guide-param"><span class="label">Entry 4:</span> <span class="value">12% of bankroll (other half of nuclear)</span></div>
-        <div class="guide-param"><span class="label">Max per game:</span> <span class="value">48% of bankroll</span></div>
-    </div>
-
-    <h3><span class="guide-badge exit">EXIT</span> Exit Rules (1-2 entries)</h3>
-    <p>Exit strategy depends on the average entry price:</p>
-
-    <p><strong>If average cost &lt; 30&cent; (cheap entries):</strong></p>
-    <ul>
-        <li>Stage 1: Sell 50% at +17.5% profit (lock in gains early)</li>
-        <li>Stage 2: Sell remaining when price hits 40&cent;</li>
-    </ul>
-
-    <p><strong>If average cost &ge; 30&cent;:</strong></p>
-    <ul>
-        <li>Sell all when price hits 48&cent;</li>
-    </ul>
-
-    <h3><span class="guide-badge exit">EXIT</span> Capital Recovery Mode (3+ entries)</h3>
-    <p>If we've made 3 or more entries, the position is deep. The goal shifts from profit to getting our money back.
-    <strong>Sell everything the moment the price reaches the average cost (breakeven or better).</strong></p>
-
-    <h3><span class="guide-badge stop">STOP</span> Dynamic Stop Loss (Q3+ only, 1-2 entries)</h3>
-    <p>The stop loss is calculated dynamically to maintain a 2:1 reward-to-risk ratio against the 48&cent; target:</p>
-    <ul>
-        <li><strong>Formula:</strong> Max loss = half of potential gain to 48&cent;</li>
-        <li><code>stop_price = avg_cost - (48 - avg_cost) / 2</code></li>
-    </ul>
-
-    <div class="guide-example">
-        <div class="heading">Dynamic Stop Examples</div>
-        Avg 35&cent; &rarr; Gain to 48&cent; = 13&cent;, max loss = 6.5&cent;, stop at 28.5&cent;<br>
-        Avg 32&cent; &rarr; Gain to 48&cent; = 16&cent;, max loss = 8&cent;, stop at 24&cent;<br>
-        Avg 25&cent; &rarr; Gain to 48&cent; = 23&cent;, max loss = 11.5&cent;, stop at 13.5&cent;<br>
-        Avg 20&cent; &rarr; Gain to 48&cent; = 28&cent;, max loss = 14&cent;, stop at 6&cent;
-    </div>
-
-    <p>This means if we win, we make $X. If we lose, we lose $X/2. We only need to win 1 out of 3 trades to break even.</p>
-
-    <h3><span class="guide-badge time">TIME</span> Time Exit</h3>
-    <ul>
-        <li>Q4 with less than 5 minutes remaining: sell everything regardless of P&L</li>
-    </ul>
-
-    <div class="guide-example">
-        <div class="heading">Example Trade</div>
-        Celtics -4 favorites vs Nets. Nets jump out to a 15-point lead in Q1. Deficit vs spread = 19, price drops
-        from 55&cent; to 28&cent; (-49%). Bot buys Entry 1 at 28&cent;. Price keeps falling &rarr; Entry 2 at 21&cent;.
-        Average cost now 24.5&cent;. Celtics go on a 12-0 run, price bounces to 29&cent; (+18%) &rarr; sell 50%.
-        Game tightens up, price hits 40&cent; &rarr; sell the rest. Net gain: ~15&cent; per share on half, ~16&cent; on the other half.
-    </div>
-
-    <h3>Limits</h3>
-    <div class="guide-grid">
-        <div class="guide-param"><span class="label">Max concurrent positions:</span> <span class="value">3</span></div>
-        <div class="guide-param"><span class="label">Max entries per game:</span> <span class="value">4</span></div>
-    </div>
-</div>
-
-<hr class="guide-divider">
-
-<!-- ═══════════ TIERED CLASSIC ═══════════ -->
-<div class="card guide-section">
-    <h2 style="color:var(--tiered-classic)">Strategy 2b: Tiered Classic</h2>
-    <div class="guide-subtitle">Same entry logic as Tiered, but with the original multiplier-based house money exit system. Run in parallel for A/B comparison.</div>
-
-    <h3>Philosophy</h3>
-    <p>This is the "swing for the fences" version. Instead of quick scalps, it uses fixed multiplier profit targets
-    (1.75x, 3x, 5x) that sell in stages as the price climbs. It's more patient, aiming for bigger wins at the
-    cost of potentially giving back gains. Runs alongside Tiered V2 so we can see which approach performs better
-    over time.</p>
-
-    <h3><span class="guide-badge entry">ENTRY</span> Entry Conditions</h3>
-    <p>Same as Tiered (Quick Scalp) above, except the max entry price is 40&cent; instead of 35&cent;.</p>
-
-    <h3><span class="guide-badge exit">EXIT</span> Capital Recovery Mode (3+ entries)</h3>
-    <p>Same as Tiered: if 3+ entries have been made, sell everything at breakeven or better.</p>
-
-    <h3><span class="guide-badge stop">STOP</span> Universal Stop Loss (Q3+ only)</h3>
-    <ul>
-        <li>Sell all if price drops 50% below average cost, starting from Q3</li>
-    </ul>
-
-    <h3><span class="guide-badge exit">EXIT</span> House Money Exit System (1-2 entries)</h3>
-    <p>Profits are taken in stages based on how much the price has multiplied from average cost:</p>
-    <ul>
-        <li><strong>Capital Recovery (1.75x):</strong> Sell 40% of shares when price reaches 1.75x average cost</li>
-        <li><strong>House Money 1 (3x):</strong> Sell 25% of remaining shares at 3x</li>
-        <li><strong>House Money 2 (5x):</strong> Sell 30% of remaining at 5x</li>
-        <li><strong>Late Game Lock (80&cent;+):</strong> If price &ge; 80&cent; in Q4 with &lt; 3 min left, sell 60% to lock in gains</li>
-        <li><strong>Trailing Stop (50%):</strong> After capital is recovered, if price drops 50% from its peak, sell all remaining</li>
-    </ul>
-
-    <div class="guide-example">
-        <div class="heading">Example Exit Cascade</div>
-        Buy 100 shares at avg 20&cent; ($20 cost).<br>
-        Price hits 35&cent; (1.75x) &rarr; sell 40 shares at 35&cent; ($14 back, nearly recovered cost).<br>
-        Price hits 60&cent; (3x) &rarr; sell 15 of remaining 60 shares ($9).<br>
-        Price hits 85&cent; in Q4 with 2 min left &rarr; sell 60% of remaining 45 shares (27 shares at 85&cent; = $23).<br>
-        Hold 18 shares for settlement &rarr; if they win, that's $18 more.
-    </div>
-
-    <h3><span class="guide-badge stop">STOP</span> Defensive Exits (when losing)</h3>
-    <ul>
-        <li><strong>Hard Floor:</strong> In Q4, if position value drops below 15% of total invested, sell all</li>
-        <li><strong>Sell into Strength:</strong> In defensive mode, if the team shows brief positive momentum (score &gt; 0.3), sell everything to cut losses at a less-bad price</li>
-    </ul>
-
-    <h3>Limits</h3>
-    <div class="guide-grid">
-        <div class="guide-param"><span class="label">Max concurrent positions:</span> <span class="value">3</span></div>
-        <div class="guide-param"><span class="label">Max entries per game:</span> <span class="value">4</span></div>
-        <div class="guide-param"><span class="label">Max entry price:</span> <span class="value">40&cent; (vs 35&cent; for Tiered V2)</span></div>
-    </div>
-</div>
-
-<hr class="guide-divider">
-
-<!-- ═══════════ HEAVY FAVORITE ═══════════ -->
-<div class="card guide-section">
-    <h2 style="color:var(--heavy)">Strategy 3: Heavy Favorite Collapse</h2>
-    <div class="guide-subtitle">When a big favorite gets blown out early, buy at panic prices. The wider the spread, the more we bet. Patient exits aiming for settlement.</div>
-
-    <h3>Philosophy</h3>
-    <p>This strategy targets rare, high-conviction situations: a team favored by 8+ points is getting demolished
-    early. The market panics and dumps the contract to rock-bottom prices. But heavy favorites exist for a reason &mdash;
-    they have superior talent. The wider the Vegas spread, the more confident we are in a comeback, and the bigger
-    we size the position. Exits are more patient than Tiered, often holding for settlement (full $1.00 payout).</p>
-
-    <h3><span class="guide-badge entry">ENTRY</span> Entry 1 Conditions</h3>
-    <ul>
-        <li>Quarter 1 or early Q2 (at least 8 min left in Q2)</li>
-        <li>Pre-game spread &ge; 8 points (big favorite)</li>
-        <li>Deficit vs spread &ge; 15</li>
-        <li>Kalshi ask price &le; 30&cent;</li>
-        <li>Order book depth &ge; 50 contracts</li>
-    </ul>
-
-    <h3><span class="guide-badge entry">ENTRY</span> Entries 2-4</h3>
-    <p>Same averaging-down logic as Tiered, but position sizing is scaled by the spread:</p>
-    <div class="guide-grid">
-        <div class="guide-param"><span class="label">Spread 8-10:</span> <span class="value">1.0x base budget</span></div>
-        <div class="guide-param"><span class="label">Spread 10-12:</span> <span class="value">1.25x base budget</span></div>
-        <div class="guide-param"><span class="label">Spread 12+:</span> <span class="value">1.5x base budget</span></div>
-    </div>
-
-    <h3><span class="guide-badge exit">EXIT</span> House Money System (Patient)</h3>
-    <p>Higher multiplier targets than Tiered Classic because we have more conviction:</p>
-    <ul>
-        <li><strong>Capital Recovery (2x):</strong> Sell 35% at 2x average cost</li>
-        <li><strong>House Money 1 (3x):</strong> Sell 20% at 3x</li>
-        <li><strong>House Money 2 (60&cent;+):</strong> Sell 20% when price hits 60&cent;</li>
-        <li><strong>Trailing Stop (40%):</strong> After recovery, sell all if price drops 40% from peak (tighter than Classic because we expect these to resolve decisively)</li>
-    </ul>
-
-    <h3><span class="guide-badge stop">STOP</span> Defensive Exits</h3>
-    <ul>
-        <li><strong>Hard Floor:</strong> In Q4, sell all if position value &lt; 15% of cost</li>
-        <li><strong>Sell into Strength:</strong> In defensive mode, sell into any positive momentum</li>
-    </ul>
-
-    <div class="guide-example">
-        <div class="heading">Example Trade</div>
-        Bucks -12 favorites vs Wizards. Wizards go on a 20-2 run to start. Deficit vs spread = 30, price
-        crashes from 80&cent; to 18&cent;. Bot buys Entry 1 at 18&cent; with 1.5x sizing (spread 12+). Entry 2 at 12&cent;.
-        Avg cost: 15&cent;. Bucks stage a furious comeback. Price hits 30&cent; (2x) &rarr; sell 35%. Hits 45&cent; (3x) &rarr;
-        sell 20%. Hits 60&cent; &rarr; sell 20%. Hold the rest &mdash; Bucks win, remaining shares pay out at $1.00.
-    </div>
-
-    <h3>Limits</h3>
-    <div class="guide-grid">
-        <div class="guide-param"><span class="label">Max concurrent positions:</span> <span class="value">2</span></div>
-        <div class="guide-param"><span class="label">Max entries per game:</span> <span class="value">4</span></div>
-    </div>
-</div>
-
-<hr class="guide-divider">
-
-<!-- ═══════════ RISK MANAGEMENT ═══════════ -->
-<div class="card guide-section">
-    <h2>Global Risk Management</h2>
-    <div class="guide-subtitle">Safeguards that apply across all strategies to prevent catastrophic losses.</div>
-    <ul>
-        <li><strong>Daily Loss Limit (30%):</strong> If any strategy loses 30% of its bankroll in a single day on a game, that game is paused for that strategy</li>
-        <li><strong>Weekly Loss Limit (25%):</strong> If a strategy loses 25% of its bankroll in a week, the entire strategy is paused pending review</li>
-        <li><strong>Global Hard Floor (60%):</strong> If total bankroll drops below 60% of starting balance, all trading halts</li>
-        <li><strong>Liquidity Cap (30%):</strong> Never consume more than 30% of visible order book depth in a single order</li>
-        <li><strong>No Late Trading:</strong> No new entries in the final 2 minutes of any game</li>
-        <li><strong>Slippage Alert (3&cent;):</strong> Alert if average execution slippage exceeds 3&cent;</li>
-        <li><strong>Duplicate Prevention:</strong> PID lockfile prevents multiple bot instances; database-level check prevents duplicate Entry 1s</li>
+        <li>Base entry gates: spread 1-7, deficit_vs_spread &ge; 10, drop from tipoff &ge; 25%, ask &le; 35&cent;, depth &ge; 50, Q1-Q2 only.</li>
+        <li>Close-spread regime (&le; 3.5): scalp-only, max 2 entries, TP1 at avg+6&cent;, TP2 at min(avg+10&cent;, 42&cent;), stop at -18%, time-stop in Q3 (&lt;300s).</li>
+        <li>Mid-spread regime (&gt; 3.5): recovery logic. Entry 3+ requires stronger spread (&ge; 6.0).</li>
+        <li>Standard exits: +17.5% partial then 40&cent; target when avg&lt;30&cent;; otherwise 48&cent; target.</li>
+        <li>3+ entry positions switch to capital recovery mode with breakeven exit plus dedicated recovery stop.</li>
+        <li>Tail risk controls: universal max-loss cap per position plus Q3+ dynamic stop geometry and Q4 time exit (&lt;300s).</li>
     </ul>
 </div>
 
 <hr class="guide-divider">
 
-<!-- ═══════════ STRATEGY COMPARISON ═══════════ -->
 <div class="card guide-section">
-    <h2>Strategy Comparison at a Glance</h2>
-    <table style="font-size:12px">
-        <thead>
-            <tr><th></th><th style="color:var(--conservative)">Conservative</th><th style="color:var(--tiered)">Tiered (Quick Scalp)</th><th style="color:var(--tiered-classic)">Tiered Classic</th><th style="color:var(--heavy)">Heavy Favorite</th></tr>
-        </thead>
-        <tbody>
-            <tr><td>Bankroll</td><td>30%</td><td>30%</td><td>30%</td><td>10%</td></tr>
-            <tr><td>Entries per game</td><td>1</td><td>Up to 4</td><td>Up to 4</td><td>Up to 4</td></tr>
-            <tr><td>Max entry price</td><td>35&cent;</td><td>35&cent;</td><td>40&cent;</td><td>30&cent;</td></tr>
-            <tr><td>Min spread</td><td>Any</td><td>1-7 pts</td><td>1-7 pts</td><td>8+ pts</td></tr>
-            <tr><td>Edge required</td><td>8%+</td><td>No</td><td>No</td><td>No</td></tr>
-            <tr><td>Profit style</td><td>2-stage TP</td><td>Quick scalp / 48&cent;</td><td>House money (1.75x/3x/5x)</td><td>Patient house money (2x/3x/60&cent;)</td></tr>
-            <tr><td>Stop loss</td><td>-30% (12m hold)</td><td>Dynamic 2:1 R/R (Q3+)</td><td>-50% (Q3+)</td><td>Hard floor (Q4)</td></tr>
-            <tr><td>Risk profile</td><td>Low</td><td>Medium</td><td>Medium-High</td><td>High (rare, big)</td></tr>
-        </tbody>
-    </table>
+    <h2 style="color:var(--tiered-classic)">Tiered Classic (A/B Track)</h2>
+    <ul>
+        <li>Entry logic follows Tiered regime rules, but max entry price is 40&cent;.</li>
+        <li>Close-spread games still cap at 2 entries; entry 3+ also requires spread &ge; 6.0.</li>
+        <li>Reachable ladder exits: 1.5x (sell 50%), 2.0x (sell 25%), 2.2x (sell 25%).</li>
+        <li>Additional exits: 80&cent; late-game lock (Q4 &lt;180s), 50% trailing stop after recovery, defensive hard-floor behavior.</li>
+        <li>Risk controls: universal tail stop, Q3+ universal stop, and recovery-mode hard stop for 3+ entries.</li>
+    </ul>
+</div>
+
+<hr class="guide-divider">
+
+<div class="card guide-section">
+    <h2 style="color:var(--heavy)">Heavy Favorite</h2>
+    <ul>
+        <li>Entry 1 gates: spread &ge; 8, deficit_vs_spread &ge; 15, ask &le; 30&cent;, depth &ge; 50, Q1 or early Q2 (at least 8 min left).</li>
+        <li>Spread-scaled sizing multipliers: 1.0x (8-10), 1.25x (10-12), 1.5x (12+).</li>
+        <li>Entry 3+ is restricted to stronger favorites only (spread &ge; 10).</li>
+        <li>Exits: 2.0x capital recovery (35%), 3.0x house-money-1 (20%), 60&cent; house-money-2 (20%), 40% trailing stop.</li>
+        <li>Risk controls: universal max-loss cap and defensive hard-floor / sell-into-strength behavior.</li>
+        <li>Max concurrent positions: 2.</li>
+    </ul>
+</div>
+
+<hr class="guide-divider">
+
+<div class="card guide-section">
+    <h2>Global Risk Controls</h2>
+    <ul>
+        <li>Daily strategy-game loss pause: 30%.</li>
+        <li>Weekly strategy pause threshold: 25%.</li>
+        <li>Global hard floor: halt all trading below 60% of starting bankroll.</li>
+        <li>Max liquidity consumption per order: 30% of visible depth.</li>
+        <li>No new entries in final 120 seconds of regulation.</li>
+        <li>Execution slippage alert threshold: 3&cent;.</li>
+    </ul>
+</div>
+
+<hr class="guide-divider">
+
+<div class="card guide-section">
+    <h2>Weekly Scorecard Workflow</h2>
+    <p>Use <code>tools/weekly_scorecard.py</code> to generate governance outputs from exports:</p>
+    <ul>
+        <li><code>docs/weekly_scorecard.md</code> for human review</li>
+        <li><code>docs/weekly_scorecard.json</code> for automation/dashboard consumption</li>
+    </ul>
+    <p>The scorecard reports strategy, spread-bucket, and entry-count expectancy, then emits parameter governance recommendations when degradation is detected.</p>
 </div>
 `;
         }
