@@ -1,0 +1,221 @@
+"""
+All configuration and strategy parameters in one place.
+Change thresholds here — not scattered across strategy files.
+"""
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+# ─────────────────────────────────────────────
+# API Configuration
+# ─────────────────────────────────────────────
+
+KALSHI_ENV = os.getenv("KALSHI_ENV", "demo")
+KALSHI_BASE_URL = (
+    "https://demo-api.kalshi.co/trade-api/v2"
+    if KALSHI_ENV == "demo"
+    else "https://api.elections.kalshi.com/trade-api/v2"
+)
+KALSHI_API_KEY_ID = os.getenv("KALSHI_API_KEY_ID", "")
+KALSHI_PRIVATE_KEY_PATH = os.getenv("KALSHI_PRIVATE_KEY_PATH", "./kalshi-key.pem")
+
+ODDS_API_KEY = os.getenv("ODDS_API_KEY", "")
+ODDS_API_BASE_URL = "https://api.the-odds-api.com/v4"
+
+BETSTACK_API_KEY = os.getenv("BETSTACK_API_KEY", "")
+
+ESPN_BASE_URL = "http://site.api.espn.com/apis/site/v2/sports/basketball/nba"
+NBA_CDN_BASE_URL = "https://cdn.nba.com/static/json/liveData"
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+
+# ─────────────────────────────────────────────
+# Bot Settings
+# ─────────────────────────────────────────────
+
+PAPER_TRADING = os.getenv("PAPER_TRADING", "true").lower() == "true"
+INITIAL_BANKROLL_CENTS = int(os.getenv("INITIAL_BANKROLL_CENTS", "63960"))  # $639.60
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# Main loop timing (seconds)
+MAIN_LOOP_INTERVAL = 15          # How often the main loop runs
+SNAPSHOT_INTERVAL = 30           # How often to log game snapshots to DB
+ODDS_POLL_INTERVAL = 90          # BetStack: every 90s (rate limit: 1 req/60s, with buffer)
+KALSHI_POLL_INTERVAL = 10        # Kalshi price refresh
+KALSHI_REDISCOVER_INTERVAL = 300  # Re-discover NBA markets every 5 min (they may appear when games start)
+ESPN_POLL_INTERVAL = 15          # ESPN score refresh
+INJURY_CHECK_INTERVAL = 120      # Check for injuries every 2 minutes
+
+# Game hours (ET) - only poll Odds API during this window
+GAME_HOURS_START_ET = 19  # 7 PM ET
+GAME_HOURS_END_ET = 1     # 1 AM ET (next day)
+
+# Database
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "db", "trading_bot.db")
+
+# Dashboard
+DASHBOARD_PORT = 8000
+DASHBOARD_REFRESH_SECONDS = 10
+
+# ─────────────────────────────────────────────
+# Bankroll Allocation (% of total)
+# ─────────────────────────────────────────────
+
+CONSERVATIVE_BANKROLL_PCT = 0.30        # 30%
+TIERED_BANKROLL_PCT = 0.30              # 30% (V2: entry-price-scaled exits)
+TIERED_CLASSIC_BANKROLL_PCT = 0.30      # 30% (Classic: original 1.75x/3x/5x exits)
+HEAVY_FAVORITE_BANKROLL_PCT = 0.10      # 10%
+
+# ─────────────────────────────────────────────
+# Strategy 1: CONSERVATIVE
+# ─────────────────────────────────────────────
+
+CONS_MIN_DEFICIT_VS_SPREAD = 12
+CONS_MIN_EDGE_PCT = 0.08           # 8% minimum edge (fair_value - kalshi_price/100)
+CONS_MAX_ENTRY_PRICE_CENTS = 35    # Won't buy above 35¢
+CONS_MIN_BOOK_DEPTH = 100          # Minimum contracts at the ask
+CONS_MAX_ENTRY_QUARTER = 2         # No entries after Q2
+
+# Conservative position sizing (% of conservative bankroll)
+CONS_SIZE_EDGE_8_10 = 0.08         # 8% when edge 8-10%
+CONS_SIZE_EDGE_10_12 = 0.12        # 12% when edge 10-12%
+CONS_SIZE_EDGE_12_PLUS = 0.16      # 16% when edge 12%+
+
+# Conservative exits
+CONS_TP1_PCT = 0.30                # Take profit 1: sell 50% at +30%
+CONS_TP1_SELL_PCT = 0.50           # Sell 50% of shares
+CONS_TP2_PCT = 0.60                # Take profit 2: sell remaining at +60%
+CONS_TP2_SELL_PCT = 1.00           # Sell all remaining
+CONS_STOP_LOSS_PCT = -0.30         # Stop loss at -30%
+CONS_STOP_LOSS_MIN_HOLD_MINUTES = 12  # Must hold 12+ min before stop fires
+CONS_THESIS_INVALID_DEFICIT = 25   # Deficit > 25 invalidates thesis
+CONS_THESIS_INVALID_MIN_QUARTER = 3
+CONS_THESIS_INVALID_MAX_TIME_SEC = 480  # < 8 minutes remaining
+
+# Conservative limits
+CONS_MAX_CONCURRENT_POSITIONS = 2
+
+# ─────────────────────────────────────────────
+# Strategy 2: TIERED
+# ─────────────────────────────────────────────
+
+TIER_MIN_SPREAD = 1                # Pre-game spread at least 1
+TIER_MAX_SPREAD = 7                # Pre-game spread at most 7
+TIER_MIN_DEFICIT_VS_SPREAD = 10
+TIER_MIN_PRICE_DROP_PCT = 0.25     # 25% drop from tipoff price
+TIER_MAX_ENTRY_PRICE_CENTS = 35    # Won't buy above 35¢
+TIER_MIN_BOOK_DEPTH = 50
+TIER_MAX_ENTRY_QUARTER = 2         # Entries 1-4 only in Q1/Q2
+
+# Tiered multi-entry rules
+TIER_ENTRY2_MIN_ADDITIONAL_DROP_PCT = 0.25   # Price must drop 25% more from Entry 1
+TIER_ENTRY2_MIN_ADDITIONAL_DEFICIT = 8       # Deficit must grow by 8+ since Entry 1
+TIER_ENTRY2_MIN_TIME_LEFT_Q2_SEC = 360       # At least 6 min left in Q2 for Entry 2
+TIER_ENTRY34_MIN_ADDITIONAL_DROP_PCT = 0.25  # Same for Entry 3/4
+TIER_ENTRY4_MIN_TIME_LEFT_Q2_SEC = 480       # At least 8 min left in Q2 for Entry 4
+
+# Tiered position sizing (% of tiered bankroll)
+TIER_GAME_BUDGET_PCT = 0.24        # 24% game budget, split 50/50 for Entry 1 & 2
+TIER_NUCLEAR_BUDGET_PCT = 0.24     # 24% nuclear reserve for Entry 3 & 4
+TIER_MAX_PER_GAME_PCT = 0.48       # 48% max total per game
+
+# ─── Quick Scalp Exit System ───
+TIER_SCALP_PROFIT_PCT = 0.175        # Sell 50% at +17.5% (midpoint of 15-20%)
+TIER_SCALP_PARTIAL_SELL_PCT = 0.50   # Sell half at first profit target
+TIER_SCALP_PRICE_TARGET_CENTS = 40   # Low-avg path: sell remaining when price hits 40¢
+TIER_SCALP_HIGH_AVG_TARGET_CENTS = 48  # High-avg path: sell all at 48¢; also the basis for dynamic stop
+TIER_SCALP_AVG_COST_THRESHOLD = 30   # Below 30¢ avg = 2-stage exit; above = 48¢ target
+TIER_SCALP_RECOVERY_ENTRIES = 3      # 3+ entries = capital recovery mode (sell at breakeven)
+TIER_TIME_EXIT_Q4_SEC = 300          # Force exit with < 5 min left in Q4
+
+# Tiered limits
+TIER_MAX_CONCURRENT_POSITIONS = 3
+
+# ─────────────────────────────────────────────
+# Strategy 2b: TIERED CLASSIC (original exit logic)
+# Entry rules are shared with Tiered V2 above.
+# ─────────────────────────────────────────────
+
+TIER_CLASSIC_MAX_ENTRY_PRICE_CENTS = 40    # Original 40¢ cap
+
+# Classic exits (fixed multipliers)
+TIER_CLASSIC_CAPITAL_RECOVERY_MULT = 1.75
+TIER_CLASSIC_CAPITAL_RECOVERY_SELL_PCT = 0.40
+TIER_CLASSIC_HOUSE_MONEY_1_MULT = 3.0
+TIER_CLASSIC_HOUSE_MONEY_1_SELL_PCT = 0.25
+TIER_CLASSIC_HOUSE_MONEY_2_MULT = 5.0
+TIER_CLASSIC_HOUSE_MONEY_2_SELL_PCT = 0.30
+TIER_CLASSIC_LATE_GAME_PRICE_CENTS = 80
+TIER_CLASSIC_LATE_GAME_SELL_PCT = 0.60
+TIER_CLASSIC_TRAILING_STOP_PCT = 0.50
+
+# Classic stop loss
+TIER_CLASSIC_DEFENSIVE_HARD_FLOOR_PCT = 0.15
+TIER_CLASSIC_UNIVERSAL_STOP_PCT = 0.50    # -50% unrealized loss = sell all (Q3+ only)
+TIER_CLASSIC_RECOVERY_ENTRIES = 3         # 3+ entries = capital recovery (sell at breakeven)
+
+# Classic limits
+TIER_CLASSIC_MAX_CONCURRENT_POSITIONS = 3
+
+# ─────────────────────────────────────────────
+# Strategy 3: HEAVY FAVORITE COLLAPSE
+# ─────────────────────────────────────────────
+
+HF_MIN_SPREAD = 8                  # Pre-game spread at least 8 points
+HF_MIN_DEFICIT_VS_SPREAD = 15
+HF_MAX_ENTRY_PRICE_CENTS = 30      # Won't buy above 30¢
+HF_MIN_BOOK_DEPTH = 50
+HF_MAX_ENTRY_QUARTER = 2
+HF_ENTRY1_MIN_TIME_LEFT_Q2_SEC = 480  # At least 8 min left in Q2 for Entry 1
+
+# Heavy favorite spread-scaled sizing
+HF_BASE_GAME_BUDGET_PCT = 0.24     # 24% base
+HF_SPREAD_8_10_MULT = 1.0          # 1x at spread 8-10
+HF_SPREAD_10_12_MULT = 1.25        # 1.25x at spread 10-12
+HF_SPREAD_12_PLUS_MULT = 1.5       # 1.5x at spread 12+
+HF_NUCLEAR_MATCHES_GAME = True     # Nuclear reserve matches game budget (including multiplier)
+
+# Heavy favorite exits (more patient)
+HF_CAPITAL_RECOVERY_MULT = 2.0     # Higher threshold: sell 35% at 2x
+HF_CAPITAL_RECOVERY_SELL_PCT = 0.35
+HF_HOUSE_MONEY_1_MULT = 3.0        # Sell 20% at 3x
+HF_HOUSE_MONEY_1_SELL_PCT = 0.20
+HF_HOUSE_MONEY_2_PRICE_CENTS = 60  # Sell 20% at 60¢+
+HF_HOUSE_MONEY_2_SELL_PCT = 0.20
+HF_TRAILING_STOP_PCT = 0.40        # 40% from peak (tighter than tiered)
+
+# Heavy favorite stop loss
+HF_DEFENSIVE_HARD_FLOOR_PCT = 0.15
+
+# Heavy favorite limits
+HF_MAX_CONCURRENT_POSITIONS = 2
+
+# ─────────────────────────────────────────────
+# Time-Based Game Modes
+# ─────────────────────────────────────────────
+
+# Neutral mode: first N seconds of Q3 game time
+NEUTRAL_MODE_Q3_WINDOW_SEC = 360   # First 6 minutes of Q3
+
+# Transition from neutral to defensive
+NEUTRAL_TO_DEFENSIVE_DEFICIT_GROWING_MIN_SEC = 240  # If deficit growing for 4+ min in Q3
+
+# ─────────────────────────────────────────────
+# Injury Detection
+# ─────────────────────────────────────────────
+
+INJURY_ABSENCE_THRESHOLD_SEC = 300  # 5 minutes of game time without appearing in PBP
+
+# ─────────────────────────────────────────────
+# Risk Management (Global)
+# ─────────────────────────────────────────────
+
+DAILY_LOSS_LIMIT_PCT = 0.30         # 30% of strategy bankroll → pause that game only
+WEEKLY_LOSS_LIMIT_PCT = 0.25        # 25% → pause and review
+GLOBAL_HARD_FLOOR_PCT = 0.60        # Total bankroll < 60% of start → everything pauses
+MAX_LIQUIDITY_CONSUMPTION_PCT = 0.30  # Don't consume > 30% of visible book depth
+NO_TRADE_FINAL_MINUTES_SEC = 120     # No new trades in final 2 minutes of game
+MAX_SLIPPAGE_ALERT_CENTS = 3         # Alert if avg slippage > 3¢

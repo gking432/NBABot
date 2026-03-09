@@ -1,0 +1,17 @@
+# Secrets - NEVER commit these
+.env
+*.pem
+*.key
+kalshi-key*
+
+# Database (optional - remove if you want to track it)
+db/*.db
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Logs
+logs/*.log
