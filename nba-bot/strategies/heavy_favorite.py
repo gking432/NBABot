@@ -21,6 +21,8 @@ from core.config import (
     HF_HOUSE_MONEY_2_PRICE_CENTS, HF_HOUSE_MONEY_2_SELL_PCT,
     HF_TRAILING_STOP_PCT, HF_DEFENSIVE_HARD_FLOOR_PCT,
     HF_MAX_POSITION_LOSS_PCT, HF_ENTRY3_MIN_SPREAD,
+    TIER_ENTRY2_Q3_WINDOW_SEC, TIER_ENTRY2_Q3_MIN_DROP_PCT,
+    TIER_ENTRY2_Q3_MIN_BOOK_DEPTH,
     TIER_ENTRY2_MIN_ADDITIONAL_DROP_PCT,
     TIER_MIN_BOOK_DEPTH, TIER_ENTRY2_MIN_TIME_LEFT_Q2_SEC,
     TIER_ENTRY4_MIN_TIME_LEFT_Q2_SEC,
@@ -78,7 +80,9 @@ class HeavyFavoriteStrategy(BaseStrategy):
 
         # 1. Quarter must be 1 or early Q2
         if state.quarter > HF_MAX_ENTRY_QUARTER:
-            return None
+            if not (next_entry == 2 and state.quarter == 3 and
+                    state.time_remaining_seconds >= TIER_ENTRY2_Q3_WINDOW_SEC):
+                return None
         if state.quarter == 2 and state.time_remaining_seconds < HF_ENTRY1_MIN_TIME_LEFT_Q2_SEC:
             return None
 
@@ -146,6 +150,8 @@ class HeavyFavoriteStrategy(BaseStrategy):
                 return None
             if next_entry >= 4 and state.time_remaining_seconds < TIER_ENTRY4_MIN_TIME_LEFT_Q2_SEC:
                 return None
+        if state.quarter == 3 and next_entry != 2:
+            return None
 
         # Price must have dropped further
         last_entry = position.entries[-1] if position.entries else None
@@ -161,13 +167,15 @@ class HeavyFavoriteStrategy(BaseStrategy):
             return None
 
         price_drop_since_last = (last_price - ask_price) / last_price
-        if price_drop_since_last < TIER_ENTRY2_MIN_ADDITIONAL_DROP_PCT:
+        min_drop = TIER_ENTRY2_Q3_MIN_DROP_PCT if (next_entry == 2 and state.quarter == 3) else TIER_ENTRY2_MIN_ADDITIONAL_DROP_PCT
+        if price_drop_since_last < min_drop:
             return None
 
         if next_entry >= 3 and state.opening_spread < HF_ENTRY3_MIN_SPREAD:
             return None
 
-        if state.kalshi_book_depth < TIER_MIN_BOOK_DEPTH:
+        min_depth = TIER_ENTRY2_Q3_MIN_BOOK_DEPTH if (next_entry == 2 and state.quarter == 3) else TIER_MIN_BOOK_DEPTH
+        if state.kalshi_book_depth < min_depth:
             return None
 
         # ─── SIZING (spread-scaled for all entries) ───

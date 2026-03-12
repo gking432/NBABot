@@ -22,6 +22,10 @@ from core.config import (
     TIER_ENTRY34_MIN_ADDITIONAL_DROP_PCT,
     TIER_ENTRY4_MIN_TIME_LEFT_Q2_SEC,
     TIER_ENTRY3_MIN_SPREAD,
+    TIER_ENTRY2_Q3_WINDOW_SEC,
+    TIER_ENTRY2_Q3_MIN_DROP_PCT,
+    TIER_ENTRY2_Q3_DEFICIT_GROWTH,
+    TIER_ENTRY2_Q3_MIN_BOOK_DEPTH,
     TIER_GAME_BUDGET_PCT,
     TIER_NUCLEAR_BUDGET_PCT,
     TIER_MAX_PER_GAME_PCT,
@@ -48,8 +52,8 @@ logger = logging.getLogger(__name__)
 
 
 class TieredStrategy(BaseStrategy):
-    def __init__(self, positions: dict, bankroll_cents: int):
-        super().__init__(Strategy.TIERED, positions)
+    def __init__(self, positions: dict, bankroll_cents: int, strategy: Strategy = Strategy.TIERED):
+        super().__init__(strategy, positions)
         self.bankroll_cents = bankroll_cents
 
     def _is_close_spread(self, state: LiveGameState) -> bool:
@@ -123,13 +127,17 @@ class TieredStrategy(BaseStrategy):
             return None
 
         if state.quarter > TIER_MAX_ENTRY_QUARTER:
-            return None
+            if not (next_entry == 2 and state.quarter == 3 and
+                    state.time_remaining_seconds >= TIER_ENTRY2_Q3_WINDOW_SEC):
+                return None
 
         if state.quarter == 2:
             if next_entry == 2 and state.time_remaining_seconds < TIER_ENTRY2_MIN_TIME_LEFT_Q2_SEC:
                 return None
             if next_entry >= 4 and state.time_remaining_seconds < TIER_ENTRY4_MIN_TIME_LEFT_Q2_SEC:
                 return None
+        if state.quarter == 3 and next_entry != 2:
+            return None
 
         last_entry = position.entries[-1] if position.entries else None
         if not last_entry:
@@ -144,20 +152,25 @@ class TieredStrategy(BaseStrategy):
             return None
 
         price_drop_since_last = (last_price - ask_price) / last_price
-        min_drop = TIER_ENTRY2_MIN_ADDITIONAL_DROP_PCT if next_entry == 2 else TIER_ENTRY34_MIN_ADDITIONAL_DROP_PCT
+        if next_entry == 2 and state.quarter == 3:
+            min_drop = TIER_ENTRY2_Q3_MIN_DROP_PCT
+        else:
+            min_drop = TIER_ENTRY2_MIN_ADDITIONAL_DROP_PCT if next_entry == 2 else TIER_ENTRY34_MIN_ADDITIONAL_DROP_PCT
         if price_drop_since_last < min_drop:
             return None
 
         if next_entry == 2:
             deficit_growth = state.deficit_vs_spread - TIER_MIN_DEFICIT_VS_SPREAD
-            if deficit_growth < TIER_ENTRY2_MIN_ADDITIONAL_DEFICIT:
+            min_growth = TIER_ENTRY2_Q3_DEFICIT_GROWTH if state.quarter == 3 else TIER_ENTRY2_MIN_ADDITIONAL_DEFICIT
+            if deficit_growth < min_growth:
                 return None
 
         # Entry 3/4 only allowed in stronger spread regime
         if next_entry >= 3 and state.opening_spread < TIER_ENTRY3_MIN_SPREAD:
             return None
 
-        if state.kalshi_book_depth < TIER_MIN_BOOK_DEPTH:
+        min_depth = TIER_ENTRY2_Q3_MIN_BOOK_DEPTH if (next_entry == 2 and state.quarter == 3) else TIER_MIN_BOOK_DEPTH
+        if state.kalshi_book_depth < min_depth:
             return None
 
         if next_entry == 2:

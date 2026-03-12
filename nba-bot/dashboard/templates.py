@@ -25,6 +25,10 @@ def render_dashboard() -> str:
             --tiered: #66bb6a;
             --tiered-classic: #ab47bc;
             --heavy: #ffa726;
+            --conservative-hold: #26c6da;
+            --tiered-hold: #9ccc65;
+            --tiered-classic-hold: #ce93d8;
+            --pulse: #ff5252;
             --positive: #4caf50;
             --negative: #ef5350;
         }
@@ -59,6 +63,10 @@ def render_dashboard() -> str:
         .signal-dot.tiered { background: var(--tiered); }
         .signal-dot.tiered-classic { background: var(--tiered-classic); }
         .signal-dot.heavy { background: var(--heavy); }
+        .signal-dot.conservative-hold { background: var(--conservative-hold); }
+        .signal-dot.tiered-hold { background: var(--tiered-hold); }
+        .signal-dot.tiered-classic-hold { background: var(--tiered-classic-hold); }
+        .signal-dot.pulse { background: var(--pulse); }
         .tab-nav { display: flex; gap: 4px; padding: 8px 20px; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
         .tab-btn { padding: 8px 16px; border: none; background: transparent; color: var(--text); cursor: pointer; border-radius: 4px; }
         .tab-btn:hover { background: var(--border); }
@@ -73,6 +81,10 @@ def render_dashboard() -> str:
         .strategy-card.tiered .card-header { color: var(--tiered); }
         .strategy-card.tiered-classic .card-header { color: var(--tiered-classic); }
         .strategy-card.heavy .card-header { color: var(--heavy); }
+        .strategy-card.conservative-hold .card-header { color: var(--conservative-hold); }
+        .strategy-card.tiered-hold .card-header { color: var(--tiered-hold); }
+        .strategy-card.tiered-classic-hold .card-header { color: var(--tiered-classic-hold); }
+        .strategy-card.pulse .card-header { color: var(--pulse); }
         .overview-grid { display: grid; grid-template-columns: 60% 40%; gap: 20px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
@@ -217,6 +229,10 @@ def render_dashboard() -> str:
         <button class="tab-btn" data-tab="tiered">Tiered V2</button>
         <button class="tab-btn" data-tab="tieredClassic">Tiered Classic</button>
         <button class="tab-btn" data-tab="heavy">Heavy Favorite</button>
+        <button class="tab-btn" data-tab="conservativeHold">Conservative Hold</button>
+        <button class="tab-btn" data-tab="tieredHold">Tiered Hold</button>
+        <button class="tab-btn" data-tab="tieredClassicHold">Tiered Classic Hold</button>
+        <button class="tab-btn" data-tab="pulse">Pulse</button>
         <button class="tab-btn" data-tab="comparison">Comparison</button>
         <button class="tab-btn" data-tab="signals">Signal Log</button>
         <button class="tab-btn" data-tab="strategyGuide">Strategy Guide</button>
@@ -227,12 +243,40 @@ def render_dashboard() -> str:
     <div id="tabTiered" class="tab-content"></div>
     <div id="tabTieredClassic" class="tab-content"></div>
     <div id="tabHeavy" class="tab-content"></div>
+    <div id="tabConservativeHold" class="tab-content"></div>
+    <div id="tabTieredHold" class="tab-content"></div>
+    <div id="tabTieredClassicHold" class="tab-content"></div>
+    <div id="tabPulse" class="tab-content"></div>
     <div id="tabComparison" class="tab-content"></div>
     <div id="tabSignals" class="tab-content"></div>
     <div id="tabStrategyGuide" class="tab-content"></div>
 
     <script>
-        const COLORS = { conservative: '#4fc3f7', tiered: '#66bb6a', tieredClassic: '#ab47bc', heavy: '#ffa726' };
+        const COLORS = {
+            conservative: '#4fc3f7',
+            tiered: '#66bb6a',
+            tieredClassic: '#ab47bc',
+            heavy: '#ffa726',
+            conservativeHold: '#26c6da',
+            tieredHold: '#9ccc65',
+            tieredClassicHold: '#ce93d8',
+            pulse: '#ff5252'
+        };
+        const STRATEGIES = [
+            'CONSERVATIVE', 'TIERED', 'TIERED_CLASSIC', 'HEAVY_FAVORITE',
+            'CONSERVATIVE_HOLD', 'TIERED_HOLD', 'TIERED_CLASSIC_HOLD',
+            'PULSE'
+        ];
+        const STRATEGY_LABELS = {
+            CONSERVATIVE: 'Conservative',
+            TIERED: 'Tiered V2',
+            TIERED_CLASSIC: 'Tiered Classic',
+            HEAVY_FAVORITE: 'Heavy Favorite',
+            CONSERVATIVE_HOLD: 'Conservative Hold',
+            TIERED_HOLD: 'Tiered Hold',
+            TIERED_CLASSIC_HOLD: 'Tiered Classic Hold',
+            PULSE: 'Pulse'
+        };
         let chartInstances = {};
         let refreshTimer = 10;
 
@@ -303,7 +347,7 @@ def render_dashboard() -> str:
                 ]);
 
                 const stats = {};
-                for (const s of ['CONSERVATIVE', 'TIERED', 'TIERED_CLASSIC', 'HEAVY_FAVORITE']) {
+                for (const s of STRATEGIES) {
                     stats[s] = await fetchJson('/api/stats/' + s) || {};
                 }
 
@@ -320,6 +364,10 @@ def render_dashboard() -> str:
                 updateTabTiered(trades || [], positions || [], stats.TIERED || {});
                 updateTabTieredClassic(trades || [], positions || [], stats.TIERED_CLASSIC || {});
                 updateTabHeavy(trades || [], positions || [], stats.HEAVY_FAVORITE || {});
+                updateTabConservativeHold(trades || [], positions || [], stats.CONSERVATIVE_HOLD || {});
+                updateTabTieredHold(trades || [], positions || [], stats.TIERED_HOLD || {});
+                updateTabTieredClassicHold(trades || [], positions || [], stats.TIERED_CLASSIC_HOLD || {});
+                updateTabPulse(trades || [], positions || [], stats.PULSE || {});
                 updateTabComparison(trades || [], stats);
                 updateTabSignals(signals || []);
 
@@ -392,8 +440,8 @@ def render_dashboard() -> str:
                             <span>Depth: ${g.book_depth ?? '—'}</span>
                         </div>
                         <div class="signal-dots">
-                            ${['CONSERVATIVE','TIERED','TIERED_CLASSIC','HEAVY_FAVORITE'].map(st => {
-                                const cls = st === 'TIERED_CLASSIC' ? 'tiered-classic' : st.toLowerCase().replace('_',' ').split(' ')[0];
+                            ${STRATEGIES.map(st => {
+                                const cls = strategyClass(st);
                                 return `<span class="signal-dot ${cls}" style="opacity:${sigs.has(st) ? 1 : 0.25}" title="${st}${sigs.has(st) ? ' (signal in last 5m)' : ''}"></span>`;
                             }).join('')}
                         </div>
@@ -430,8 +478,25 @@ def render_dashboard() -> str:
                 targets.push({ label: 'Recovery (2x)', price: Math.round(avg * 2.0), hit: pos.capital_recovered });
                 targets.push({ label: 'HM1 (3x)', price: Math.round(avg * 3.0), hit: pos.house_money_1_hit });
                 targets.push({ label: 'HM2 (60¢)', price: 60, hit: pos.house_money_2_hit });
+            } else if (strat === 'CONSERVATIVE_HOLD' || strat === 'TIERED_HOLD' || strat === 'TIERED_CLASSIC_HOLD') {
+                targets.push({ label: 'Settlement (100¢)', price: 100, hit: false });
+            } else if (strat === 'PULSE') {
+                targets.push({ label: 'TP1 (+12%)', price: Math.round(avg * 1.12), hit: false });
+                targets.push({ label: 'TP2 (+25%)', price: Math.round(avg * 1.25), hit: false });
             }
             return targets;
+        }
+
+        function strategyClass(strat) {
+            if (strat === 'CONSERVATIVE') return 'conservative';
+            if (strat === 'TIERED') return 'tiered';
+            if (strat === 'TIERED_CLASSIC') return 'tiered-classic';
+            if (strat === 'HEAVY_FAVORITE') return 'heavy';
+            if (strat === 'CONSERVATIVE_HOLD') return 'conservative-hold';
+            if (strat === 'TIERED_HOLD') return 'tiered-hold';
+            if (strat === 'TIERED_CLASSIC_HOLD') return 'tiered-classic-hold';
+            if (strat === 'PULSE') return 'pulse';
+            return 'conservative';
         }
 
         function stratColor(strat) {
@@ -439,6 +504,10 @@ def render_dashboard() -> str:
             if (strat === 'TIERED') return 'var(--tiered)';
             if (strat === 'TIERED_CLASSIC') return 'var(--tiered-classic)';
             if (strat === 'HEAVY_FAVORITE') return 'var(--heavy)';
+            if (strat === 'CONSERVATIVE_HOLD') return 'var(--conservative-hold)';
+            if (strat === 'TIERED_HOLD') return 'var(--tiered-hold)';
+            if (strat === 'TIERED_CLASSIC_HOLD') return 'var(--tiered-classic-hold)';
+            if (strat === 'PULSE') return 'var(--pulse)';
             return 'var(--text)';
         }
 
@@ -451,13 +520,14 @@ def render_dashboard() -> str:
 
             let html = '<div class="overview-grid"><div>';
             html += '<div class="strategy-cards">';
-            for (const [name, color] of [['CONSERVATIVE','conservative'],['TIERED','tiered'],['TIERED_CLASSIC','tiered-classic'],['HEAVY_FAVORITE','heavy']]) {
+            for (const name of STRATEGIES) {
+                const color = strategyClass(name);
                 const bal = bankrolls[name] || 0;
                 const st = stats[name] || {};
                 const paused = (risk.strategy_pauses || {})[name];
                 const pausedGames = ((risk.paused_games || {})[name] || []).length;
                 html += `<div class="strategy-card ${color}">
-                    <div class="card-header">${name.replace('_',' ')}</div>
+                    <div class="card-header">${STRATEGY_LABELS[name] || name.replace('_',' ')}</div>
                     <div>Balance: ${fmt(bal)}</div>
                     <div>Total P&L: <span class="${(st.total_pnl || 0) >= 0 ? 'positive' : 'negative'}">${fmt(st.total_pnl)}</span></div>
                     <div>Win Rate: ${fmtPct(st.win_rate)}</div>
@@ -592,16 +662,20 @@ def render_dashboard() -> str:
                 if (pnl === 0 && t.action === 'BUY') return;
                 const d = (t.timestamp || '').slice(0, 10);
                 if (!d) return;
-                if (!pnlByDate[d]) pnlByDate[d] = { CONSERVATIVE: 0, TIERED: 0, TIERED_CLASSIC: 0, HEAVY_FAVORITE: 0 };
+                if (!pnlByDate[d]) {
+                    pnlByDate[d] = {};
+                    STRATEGIES.forEach(s => { pnlByDate[d][s] = 0; });
+                }
                 pnlByDate[d][t.strategy] = (pnlByDate[d][t.strategy] || 0) + pnl;
             });
             const dates = Object.keys(pnlByDate).sort();
             if (dates.length === 0) return;
 
-            const cumulative = { CONSERVATIVE: [], TIERED: [], TIERED_CLASSIC: [], HEAVY_FAVORITE: [] };
-            let running = { CONSERVATIVE: 0, TIERED: 0, TIERED_CLASSIC: 0, HEAVY_FAVORITE: 0 };
+            const cumulative = {};
+            const running = {};
+            STRATEGIES.forEach(s => { cumulative[s] = []; running[s] = 0; });
             dates.forEach(d => {
-                for (const s of ['CONSERVATIVE', 'TIERED', 'TIERED_CLASSIC', 'HEAVY_FAVORITE']) {
+                for (const s of STRATEGIES) {
                     running[s] += pnlByDate[d][s] || 0;
                     cumulative[s].push(running[s]);
                 }
@@ -614,12 +688,23 @@ def render_dashboard() -> str:
                 type: 'line',
                 data: {
                     labels: dates,
-                    datasets: [
-                        { label: 'Conservative', data: cumulative.CONSERVATIVE.map(v => v / 100), borderColor: COLORS.conservative, fill: false, tension: 0.2 },
-                        { label: 'Tiered V2', data: cumulative.TIERED.map(v => v / 100), borderColor: COLORS.tiered, fill: false, tension: 0.2 },
-                        { label: 'Tiered Classic', data: cumulative.TIERED_CLASSIC.map(v => v / 100), borderColor: COLORS.tieredClassic, fill: false, tension: 0.2 },
-                        { label: 'Heavy Favorite', data: cumulative.HEAVY_FAVORITE.map(v => v / 100), borderColor: COLORS.heavy, fill: false, tension: 0.2 }
-                    ]
+                    datasets: STRATEGIES.map(s => {
+                        let color = COLORS.conservative;
+                        if (s === 'TIERED') color = COLORS.tiered;
+                        else if (s === 'TIERED_CLASSIC') color = COLORS.tieredClassic;
+                        else if (s === 'HEAVY_FAVORITE') color = COLORS.heavy;
+                        else if (s === 'CONSERVATIVE_HOLD') color = COLORS.conservativeHold;
+                        else if (s === 'TIERED_HOLD') color = COLORS.tieredHold;
+                        else if (s === 'TIERED_CLASSIC_HOLD') color = COLORS.tieredClassicHold;
+                        else if (s === 'PULSE') color = COLORS.pulse;
+                        return {
+                            label: STRATEGY_LABELS[s] || s,
+                            data: (cumulative[s] || []).map(v => v / 100),
+                            borderColor: color,
+                            fill: false,
+                            tension: 0.2
+                        };
+                    })
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
@@ -911,6 +996,51 @@ def render_dashboard() -> str:
             }), COLORS.heavy);
         }
 
+        function updateTabSimpleStrategy(trades, positions, st, key, label, color) {
+            const filtTrades = trades.filter(t => t.strategy === key);
+            const active = positions.filter(p => p.strategy === key);
+
+            let html = '<div class="stats-row">';
+            html += `<div class="stat-box"><div class="stat-label">Strategy</div><div class="stat-value" style="color:${color}">${label}</div></div>`;
+            html += `<div class="stat-box"><div class="stat-label">Total P&L</div><div class="stat-value ${(st?.total_pnl || 0) >= 0 ? 'positive' : 'negative'}">${fmt(st?.total_pnl)}</div></div>`;
+            html += `<div class="stat-box"><div class="stat-label">Win Rate</div><div class="stat-value">${fmtPct(st?.win_rate)}</div></div>`;
+            html += `<div class="stat-box"><div class="stat-label">Avg Win</div><div class="stat-value positive">${fmt(st?.avg_win)}</div></div>`;
+            html += `<div class="stat-box"><div class="stat-label">Avg Loss</div><div class="stat-value negative">${fmt(st?.avg_loss)}</div></div>`;
+            html += `<div class="stat-box"><div class="stat-label">Trades</div><div class="stat-value">${st?.total_trades ?? 0}</div></div>`;
+            html += '</div>';
+
+            html += '<div class="card"><div class="card-header">Active Positions</div>';
+            if (active.length === 0) html += '<div class="empty-state">No active positions</div>';
+            else html += '<table><thead><tr><th>Team</th><th>Entries</th><th>Avg Cost</th><th>Shares</th><th>Mode</th></tr></thead><tbody>' +
+                active.map(p => `<tr><td>${p.team}</td><td>${p.entry_count}</td><td>${(p.avg_cost_cents ?? 0).toFixed(1)}¢</td><td>${p.shares_remaining}</td><td>${p.current_mode || '—'}</td></tr>`).join('') + '</tbody></table>';
+            html += '</div>';
+
+            html += '<div class="card"><div class="card-header">Trade History</div>';
+            if (filtTrades.length === 0) html += '<div class="empty-state">No trades yet</div>';
+            else html += '<table><thead><tr><th>Date</th><th>Team</th><th>Action</th><th>Price</th><th>P&L</th><th>Game Time</th><th>Score</th></tr></thead><tbody>' +
+                filtTrades.slice(0, 50).map(t => `<tr><td>${fmtTs(t.timestamp)}</td><td>${t.team}</td><td>${t.action}</td><td>${t.price_cents}¢</td><td class="${(t.pnl_cents || 0) >= 0 ? 'positive' : 'negative'}">${fmt(t.pnl_cents)}</td><td>${fmtGameTime(t)}</td><td>${fmtGameScore(t)}</td></tr>`).join('') + '</tbody></table>';
+            html += '</div>';
+
+            const target = document.getElementById('tab' + label.replace(/\\s+/g,''));
+            if (target) target.innerHTML = html;
+        }
+
+        function updateTabConservativeHold(trades, positions, st) {
+            updateTabSimpleStrategy(trades, positions, st, 'CONSERVATIVE_HOLD', 'Conservative Hold', COLORS.conservativeHold);
+        }
+
+        function updateTabTieredHold(trades, positions, st) {
+            updateTabSimpleStrategy(trades, positions, st, 'TIERED_HOLD', 'Tiered Hold', COLORS.tieredHold);
+        }
+
+        function updateTabTieredClassicHold(trades, positions, st) {
+            updateTabSimpleStrategy(trades, positions, st, 'TIERED_CLASSIC_HOLD', 'Tiered Classic Hold', COLORS.tieredClassicHold);
+        }
+
+        function updateTabPulse(trades, positions, st) {
+            updateTabSimpleStrategy(trades, positions, st, 'PULSE', 'Pulse', COLORS.pulse);
+        }
+
         function updateTabComparison(trades, stats) {
             let html = '<div class="card"><div class="card-header">Head-to-Head</div><table><thead><tr><th></th><th>Conservative</th><th>Tiered V2</th><th>Tiered Classic</th><th>Heavy Fav</th></tr></thead><tbody>';
             ['win_rate','avg_win','avg_loss','best_trade','worst_trade','total_pnl'].forEach((r, i) => {
@@ -1002,7 +1132,17 @@ def render_dashboard() -> str:
 
             const stratVal = document.getElementById('signalStrategy')?.value || '';
             const outcomeVal = document.getElementById('signalOutcome')?.value || '';
-            const stratOpts = [['','All Strategies'],['CONSERVATIVE','Conservative'],['TIERED','Tiered V2'],['TIERED_CLASSIC','Tiered Classic'],['HEAVY_FAVORITE','Heavy Favorite']];
+            const stratOpts = [
+                ['','All Strategies'],
+                ['CONSERVATIVE','Conservative'],
+                ['TIERED','Tiered V2'],
+                ['TIERED_CLASSIC','Tiered Classic'],
+                ['HEAVY_FAVORITE','Heavy Favorite'],
+                ['CONSERVATIVE_HOLD','Conservative Hold'],
+                ['TIERED_HOLD','Tiered Hold'],
+                ['TIERED_CLASSIC_HOLD','Tiered Classic Hold'],
+                ['PULSE','Pulse']
+            ];
             const outcomeOpts = [['','All'],['traded','Traded'],['skipped','Skipped']];
             html += '<div class="filter-bar"><select id="signalStrategy">';
             stratOpts.forEach(([v,l]) => { html += '<option value="'+v+'"'+(v===stratVal?' selected':'')+'>'+l+'</option>'; });
@@ -1033,7 +1173,7 @@ def render_dashboard() -> str:
 <div class="card guide-section">
     <h2>Strategy Guide (Source of Truth)</h2>
     <p>This tab mirrors the live code in <code>core/config.py</code> and <code>strategies/*.py</code>. The bot runs four strategies at once with bankroll split: Conservative 30%, Tiered V2 30%, Tiered Classic 30%, Heavy Favorite 10%.</p>
-    <p>Global behavior: entries only in Q1-Q2, no new entries in final 2 minutes, Q3 has a neutral window before defensive mode, and each strategy has per-position tail-risk stops.</p>
+    <p>Global behavior: entries are Q1-Q2 by default, no new entries in final 2 minutes. Tiered/Tiered Classic/Heavy Favorite now allow a limited Q3 Entry-2 window (first 6 minutes) with relaxed gates. Q3 has a neutral window before defensive mode, and each strategy has per-position tail-risk stops.</p>
 </div>
 
 <hr class="guide-divider">
@@ -1057,6 +1197,7 @@ def render_dashboard() -> str:
         <li>Base entry gates: spread 1-7, deficit_vs_spread &ge; 10, drop from tipoff &ge; 25%, ask &le; 35&cent;, depth &ge; 50, Q1-Q2 only.</li>
         <li>Close-spread regime (&le; 3.5): scalp-only, max 2 entries, TP1 at avg+6&cent;, TP2 at min(avg+10&cent;, 42&cent;), stop at -18%, time-stop in Q3 (&lt;300s).</li>
         <li>Mid-spread regime (&gt; 3.5): recovery logic. Entry 3+ requires stronger spread (&ge; 6.0).</li>
+        <li>Q3 Entry-2 window (first 6 minutes): allows a second entry if price drops &ge; 15% from Entry 1 and depth &ge; 50. No extra deficit growth required in that window.</li>
         <li>Standard exits: +17.5% partial then 40&cent; target when avg&lt;30&cent;; otherwise 48&cent; target.</li>
         <li>3+ entry positions switch to capital recovery mode with breakeven exit plus dedicated recovery stop.</li>
         <li>Tail risk controls: universal max-loss cap per position plus Q3+ dynamic stop geometry and Q4 time exit (&lt;300s).</li>
@@ -1084,9 +1225,34 @@ def render_dashboard() -> str:
         <li>Entry 1 gates: spread &ge; 8, deficit_vs_spread &ge; 15, ask &le; 30&cent;, depth &ge; 50, Q1 or early Q2 (at least 8 min left).</li>
         <li>Spread-scaled sizing multipliers: 1.0x (8-10), 1.25x (10-12), 1.5x (12+).</li>
         <li>Entry 3+ is restricted to stronger favorites only (spread &ge; 10).</li>
+        <li>Q3 Entry-2 window (first 6 minutes): allows a second entry if price drops &ge; 15% from Entry 1 and depth &ge; 50.</li>
         <li>Exits: 2.0x capital recovery (35%), 3.0x house-money-1 (20%), 60&cent; house-money-2 (20%), 40% trailing stop.</li>
         <li>Risk controls: universal max-loss cap and defensive hard-floor / sell-into-strength behavior.</li>
         <li>Max concurrent positions: 2.</li>
+    </ul>
+</div>
+
+<hr class="guide-divider">
+
+<div class="card guide-section">
+    <h2>Settlement-Only Variants</h2>
+    <ul>
+        <li><strong>Conservative Hold</strong>: same entry logic as Conservative, no early exits (settlement only).</li>
+        <li><strong>Tiered Hold</strong>: same entry logic as Tiered V2, no early exits (settlement only).</li>
+        <li><strong>Tiered Classic Hold</strong>: same entry logic as Tiered Classic, no early exits (settlement only).</li>
+        <li>These exist to compare pure settlement outcomes vs. active exits in paper trading.</li>
+    </ul>
+</div>
+
+<hr class="guide-divider">
+
+<div class="card guide-section">
+    <h2 style="color:var(--pulse)">Pulse (Aggressive Scalp)</h2>
+    <ul>
+        <li>High-action entry gates: spread 1-12, deficit_vs_spread &ge; 6, drop from tipoff &ge; 10%, ask &le; 60&cent;, depth &ge; 20.</li>
+        <li>Entries allowed through Q3 (no entries after Q3).</li>
+        <li>Exits: TP1 +12% (sell 60%), TP2 +25% (sell rest), stop at -12% after 4 min hold.</li>
+        <li>Designed for frequent trades with tight risk control.</li>
     </ul>
 </div>
 

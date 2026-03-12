@@ -37,7 +37,8 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 # ─────────────────────────────────────────────
 
 PAPER_TRADING = os.getenv("PAPER_TRADING", "true").lower() == "true"
-INITIAL_BANKROLL_CENTS = int(os.getenv("INITIAL_BANKROLL_CENTS", "63960"))  # $639.60
+# Reset to $100 per strategy across 8 strategies = $800
+INITIAL_BANKROLL_CENTS = int(os.getenv("INITIAL_BANKROLL_CENTS", "80000"))  # $800.00
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # Main loop timing (seconds)
@@ -63,6 +64,10 @@ DASHBOARD_REFRESH_SECONDS = 10
 # ─────────────────────────────────────────────
 # Bankroll Allocation (% of total)
 # ─────────────────────────────────────────────
+
+# If true, override % allocations and assign a fixed bankroll per strategy.
+USE_FIXED_STRATEGY_BANKROLLS = True
+FIXED_STRATEGY_BANKROLL_CENTS = 10000  # $100 per strategy
 
 CONSERVATIVE_BANKROLL_PCT = 0.30        # 30%
 TIERED_BANKROLL_PCT = 0.30              # 30% (V2: entry-price-scaled exits)
@@ -122,6 +127,12 @@ TIER_ENTRY2_MIN_TIME_LEFT_Q2_SEC = 360       # At least 6 min left in Q2 for Ent
 TIER_ENTRY34_MIN_ADDITIONAL_DROP_PCT = 0.25  # Same for Entry 3/4
 TIER_ENTRY4_MIN_TIME_LEFT_Q2_SEC = 480       # At least 8 min left in Q2 for Entry 4
 TIER_ENTRY3_MIN_SPREAD = 6.0                 # Entry 3/4 only in stronger spread regime
+
+# Q3 Entry-2 override (aggressive early-3Q averaging)
+TIER_ENTRY2_Q3_WINDOW_SEC = 360              # First 6 minutes of Q3
+TIER_ENTRY2_Q3_MIN_DROP_PCT = 0.15           # 15% drop vs Entry 1
+TIER_ENTRY2_Q3_DEFICIT_GROWTH = 0            # No extra deficit growth required
+TIER_ENTRY2_Q3_MIN_BOOK_DEPTH = 50
 
 # Tiered position sizing (% of tiered bankroll)
 TIER_GAME_BUDGET_PCT = 0.24        # 24% game budget, split 50/50 for Entry 1 & 2
@@ -214,6 +225,28 @@ HF_ENTRY3_MIN_SPREAD = 10            # Entry 3/4 only for very strong favorites
 
 # Heavy favorite limits
 HF_MAX_CONCURRENT_POSITIONS = 2
+
+# ─────────────────────────────────────────────
+# Strategy 4: PULSE (Aggressive Momentum Scalp)
+# ─────────────────────────────────────────────
+
+PULSE_MIN_SPREAD = 1
+PULSE_MAX_SPREAD = 12
+PULSE_MIN_DEFICIT_VS_SPREAD = 6
+PULSE_MIN_PRICE_DROP_PCT = 0.10
+PULSE_MAX_ENTRY_PRICE_CENTS = 60
+PULSE_MIN_BOOK_DEPTH = 20
+PULSE_MAX_ENTRY_QUARTER = 3
+
+PULSE_BUDGET_PCT = 0.12           # 12% of bankroll per position
+PULSE_TP1_PCT = 0.12              # +12% take profit
+PULSE_TP1_SELL_PCT = 0.60
+PULSE_TP2_PCT = 0.25              # +25% take profit
+PULSE_TP2_SELL_PCT = 1.00
+PULSE_STOP_LOSS_PCT = -0.12       # -12% stop
+PULSE_STOP_MIN_HOLD_MINUTES = 4
+
+PULSE_MAX_CONCURRENT_POSITIONS = 4
 
 # ─────────────────────────────────────────────
 # Time-Based Game Modes

@@ -27,6 +27,8 @@ from strategies.conservative import ConservativeStrategy
 from strategies.tiered import TieredStrategy
 from strategies.tiered_classic import TieredClassicStrategy
 from strategies.heavy_favorite import HeavyFavoriteStrategy
+from strategies.hold import ConservativeHoldStrategy, TieredHoldStrategy, TieredClassicHoldStrategy
+from strategies.pulse import PulseStrategy
 from trading.position_manager import PositionManager
 from trading.paper_engine import PaperTradingEngine
 from trading.risk_manager import RiskManager
@@ -75,7 +77,28 @@ class TradingBot:
             bankroll_cents=self.position_manager.bankrolls[Strategy.HEAVY_FAVORITE],
         )
 
-        self.strategies = [self.conservative, self.tiered, self.tiered_classic, self.heavy_favorite]
+        self.conservative_hold = ConservativeHoldStrategy(
+            positions=self.position_manager.conservative_hold_positions,
+            bankroll_cents=self.position_manager.bankrolls[Strategy.CONSERVATIVE_HOLD],
+        )
+        self.tiered_hold = TieredHoldStrategy(
+            positions=self.position_manager.tiered_hold_positions,
+            bankroll_cents=self.position_manager.bankrolls[Strategy.TIERED_HOLD],
+        )
+        self.tiered_classic_hold = TieredClassicHoldStrategy(
+            positions=self.position_manager.tiered_classic_hold_positions,
+            bankroll_cents=self.position_manager.bankrolls[Strategy.TIERED_CLASSIC_HOLD],
+        )
+        self.pulse = PulseStrategy(
+            positions=self.position_manager.pulse_positions,
+            bankroll_cents=self.position_manager.bankrolls[Strategy.PULSE],
+        )
+
+        self.strategies = [
+            self.conservative, self.tiered, self.tiered_classic, self.heavy_favorite,
+            self.conservative_hold, self.tiered_hold, self.tiered_classic_hold,
+            self.pulse,
+        ]
 
         # ─── Timing ───
         self._last_espn_update = 0.0
@@ -196,6 +219,18 @@ class TradingBot:
         )
         self.heavy_favorite.update_bankroll(
             self.position_manager.bankrolls[Strategy.HEAVY_FAVORITE]
+        )
+        self.conservative_hold.update_bankroll(
+            self.position_manager.bankrolls[Strategy.CONSERVATIVE_HOLD]
+        )
+        self.tiered_hold.update_bankroll(
+            self.position_manager.bankrolls[Strategy.TIERED_HOLD]
+        )
+        self.tiered_classic_hold.update_bankroll(
+            self.position_manager.bankrolls[Strategy.TIERED_CLASSIC_HOLD]
+        )
+        self.pulse.update_bankroll(
+            self.position_manager.bankrolls[Strategy.PULSE]
         )
 
         # ─── Step 5: Check Entries + Exits for Each Live Game ───

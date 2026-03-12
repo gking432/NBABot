@@ -13,6 +13,7 @@ from core.config import (
     DAILY_LOSS_LIMIT_PCT, WEEKLY_LOSS_LIMIT_PCT, GLOBAL_HARD_FLOOR_PCT,
     CONS_MAX_CONCURRENT_POSITIONS, TIER_MAX_CONCURRENT_POSITIONS,
     TIER_CLASSIC_MAX_CONCURRENT_POSITIONS, HF_MAX_CONCURRENT_POSITIONS,
+    PULSE_MAX_CONCURRENT_POSITIONS,
     INITIAL_BANKROLL_CENTS,
 )
 
@@ -40,6 +41,10 @@ class RiskManager:
             Strategy.TIERED: set(),
             Strategy.TIERED_CLASSIC: set(),
             Strategy.HEAVY_FAVORITE: set(),
+            Strategy.CONSERVATIVE_HOLD: set(),
+            Strategy.TIERED_HOLD: set(),
+            Strategy.TIERED_CLASSIC_HOLD: set(),
+            Strategy.PULSE: set(),
         }
 
         # Strategy-wide pause (weekly loss or global floor only)
@@ -48,6 +53,10 @@ class RiskManager:
             Strategy.TIERED: False,
             Strategy.TIERED_CLASSIC: False,
             Strategy.HEAVY_FAVORITE: False,
+            Strategy.CONSERVATIVE_HOLD: False,
+            Strategy.TIERED_HOLD: False,
+            Strategy.TIERED_CLASSIC_HOLD: False,
+            Strategy.PULSE: False,
         }
         self.global_pause = False
 
@@ -56,6 +65,10 @@ class RiskManager:
             Strategy.TIERED: TIER_MAX_CONCURRENT_POSITIONS,
             Strategy.TIERED_CLASSIC: TIER_CLASSIC_MAX_CONCURRENT_POSITIONS,
             Strategy.HEAVY_FAVORITE: HF_MAX_CONCURRENT_POSITIONS,
+            Strategy.CONSERVATIVE_HOLD: CONS_MAX_CONCURRENT_POSITIONS,
+            Strategy.TIERED_HOLD: TIER_MAX_CONCURRENT_POSITIONS,
+            Strategy.TIERED_CLASSIC_HOLD: TIER_CLASSIC_MAX_CONCURRENT_POSITIONS,
+            Strategy.PULSE: PULSE_MAX_CONCURRENT_POSITIONS,
         }
 
     def check_signal(self, signal: EntrySignal) -> Tuple[bool, str]:

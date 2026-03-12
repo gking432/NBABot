@@ -33,8 +33,8 @@ class ConservativeStrategy(BaseStrategy):
     Single entry, two-stage take profit, mechanical stop loss.
     """
 
-    def __init__(self, positions: dict, bankroll_cents: int):
-        super().__init__(Strategy.CONSERVATIVE, positions)
+    def __init__(self, positions: dict, bankroll_cents: int, strategy: Strategy = Strategy.CONSERVATIVE):
+        super().__init__(strategy, positions)
         self.bankroll_cents = bankroll_cents
 
         # Track which exits have been taken per position

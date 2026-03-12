@@ -33,6 +33,10 @@ class PositionManager:
         self.tiered_positions: Dict[str, Position] = {}
         self.tiered_classic_positions: Dict[str, Position] = {}
         self.heavy_favorite_positions: Dict[str, Position] = {}
+        self.conservative_hold_positions: Dict[str, Position] = {}
+        self.tiered_hold_positions: Dict[str, Position] = {}
+        self.tiered_classic_hold_positions: Dict[str, Position] = {}
+        self.pulse_positions: Dict[str, Position] = {}
 
         self._entry_locks: set = set()
 
@@ -42,6 +46,10 @@ class PositionManager:
             Strategy.TIERED: 0,
             Strategy.TIERED_CLASSIC: 0,
             Strategy.HEAVY_FAVORITE: 0,
+            Strategy.CONSERVATIVE_HOLD: 0,
+            Strategy.TIERED_HOLD: 0,
+            Strategy.TIERED_CLASSIC_HOLD: 0,
+            Strategy.PULSE: 0,
         }
 
     def initialize_bankrolls(self, total_bankroll_cents: int):
@@ -52,18 +60,27 @@ class PositionManager:
         """
         from core.config import (
             CONSERVATIVE_BANKROLL_PCT, TIERED_BANKROLL_PCT,
-            TIERED_CLASSIC_BANKROLL_PCT, HEAVY_FAVORITE_BANKROLL_PCT
+            TIERED_CLASSIC_BANKROLL_PCT, HEAVY_FAVORITE_BANKROLL_PCT,
+            USE_FIXED_STRATEGY_BANKROLLS, FIXED_STRATEGY_BANKROLL_CENTS,
         )
-        self.bankrolls[Strategy.CONSERVATIVE] = int(total_bankroll_cents * CONSERVATIVE_BANKROLL_PCT)
-        self.bankrolls[Strategy.TIERED] = int(total_bankroll_cents * TIERED_BANKROLL_PCT)
-        self.bankrolls[Strategy.TIERED_CLASSIC] = int(total_bankroll_cents * TIERED_CLASSIC_BANKROLL_PCT)
-        self.bankrolls[Strategy.HEAVY_FAVORITE] = int(total_bankroll_cents * HEAVY_FAVORITE_BANKROLL_PCT)
+        if USE_FIXED_STRATEGY_BANKROLLS:
+            for s in self.bankrolls:
+                self.bankrolls[s] = FIXED_STRATEGY_BANKROLL_CENTS
+        else:
+            self.bankrolls[Strategy.CONSERVATIVE] = int(total_bankroll_cents * CONSERVATIVE_BANKROLL_PCT)
+            self.bankrolls[Strategy.TIERED] = int(total_bankroll_cents * TIERED_BANKROLL_PCT)
+            self.bankrolls[Strategy.TIERED_CLASSIC] = int(total_bankroll_cents * TIERED_CLASSIC_BANKROLL_PCT)
+            self.bankrolls[Strategy.HEAVY_FAVORITE] = int(total_bankroll_cents * HEAVY_FAVORITE_BANKROLL_PCT)
 
         logger.info(
             f"Base bankrolls: Conservative={self.bankrolls[Strategy.CONSERVATIVE]}¢, "
             f"Tiered={self.bankrolls[Strategy.TIERED]}¢, "
             f"TieredClassic={self.bankrolls[Strategy.TIERED_CLASSIC]}¢, "
-            f"HeavyFavorite={self.bankrolls[Strategy.HEAVY_FAVORITE]}¢"
+            f"HeavyFavorite={self.bankrolls[Strategy.HEAVY_FAVORITE]}¢, "
+            f"ConservativeHold={self.bankrolls[Strategy.CONSERVATIVE_HOLD]}¢, "
+            f"TieredHold={self.bankrolls[Strategy.TIERED_HOLD]}¢, "
+            f"TieredClassicHold={self.bankrolls[Strategy.TIERED_CLASSIC_HOLD]}¢, "
+            f"Pulse={self.bankrolls[Strategy.PULSE]}¢"
         )
 
         self._replay_trade_history()
@@ -73,7 +90,11 @@ class PositionManager:
             f"Reconstructed bankrolls: Conservative={self.bankrolls[Strategy.CONSERVATIVE]}¢, "
             f"Tiered={self.bankrolls[Strategy.TIERED]}¢, "
             f"TieredClassic={self.bankrolls[Strategy.TIERED_CLASSIC]}¢, "
-            f"HeavyFavorite={self.bankrolls[Strategy.HEAVY_FAVORITE]}¢"
+            f"HeavyFavorite={self.bankrolls[Strategy.HEAVY_FAVORITE]}¢, "
+            f"ConservativeHold={self.bankrolls[Strategy.CONSERVATIVE_HOLD]}¢, "
+            f"TieredHold={self.bankrolls[Strategy.TIERED_HOLD]}¢, "
+            f"TieredClassicHold={self.bankrolls[Strategy.TIERED_CLASSIC_HOLD]}¢, "
+            f"Pulse={self.bankrolls[Strategy.PULSE]}¢"
         )
 
     def _replay_trade_history(self):
@@ -202,13 +223,25 @@ class PositionManager:
             return self.tiered_classic_positions
         elif strategy == Strategy.HEAVY_FAVORITE:
             return self.heavy_favorite_positions
+        elif strategy == Strategy.CONSERVATIVE_HOLD:
+            return self.conservative_hold_positions
+        elif strategy == Strategy.TIERED_HOLD:
+            return self.tiered_hold_positions
+        elif strategy == Strategy.TIERED_CLASSIC_HOLD:
+            return self.tiered_classic_hold_positions
+        elif strategy == Strategy.PULSE:
+            return self.pulse_positions
         return {}
 
     def get_all_active_positions(self) -> List[Position]:
         """Get all active positions across all strategies."""
         all_pos = []
-        for positions in [self.conservative_positions, self.tiered_positions,
-                          self.tiered_classic_positions, self.heavy_favorite_positions]:
+        for positions in [
+            self.conservative_positions, self.tiered_positions,
+            self.tiered_classic_positions, self.heavy_favorite_positions,
+            self.conservative_hold_positions, self.tiered_hold_positions,
+            self.tiered_classic_hold_positions, self.pulse_positions,
+        ]:
             all_pos.extend(p for p in positions.values() if p.is_active)
         return all_pos
 
@@ -464,10 +497,16 @@ class PositionManager:
         """
         Handle game settlement. Contracts pay $1.00 (100¢) for winners, $0 for losers.
         """
-        for positions_dict in [self.conservative_positions,
-                               self.tiered_positions,
-                               self.tiered_classic_positions,
-                               self.heavy_favorite_positions]:
+        for positions_dict in [
+            self.conservative_positions,
+            self.tiered_positions,
+            self.tiered_classic_positions,
+            self.heavy_favorite_positions,
+            self.conservative_hold_positions,
+            self.tiered_hold_positions,
+            self.tiered_classic_hold_positions,
+            self.pulse_positions,
+        ]:
 
             if game_id not in positions_dict:
                 continue
@@ -569,6 +608,10 @@ class PositionManager:
             (self.tiered_positions, "tiered"),
             (self.tiered_classic_positions, "tiered_classic"),
             (self.heavy_favorite_positions, "heavy_favorite"),
+            (self.conservative_hold_positions, "conservative_hold"),
+            (self.tiered_hold_positions, "tiered_hold"),
+            (self.tiered_classic_hold_positions, "tiered_classic_hold"),
+            (self.pulse_positions, "pulse"),
         ]:
             if state.game_id_espn not in positions_dict:
                 continue
