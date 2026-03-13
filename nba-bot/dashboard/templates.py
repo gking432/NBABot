@@ -16,14 +16,14 @@ def render_dashboard() -> str:
     <title>NBA Trading Bot Dashboard</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap');
         :root {
-            --bg: #0f172a;
-            --surface: #111c34;
-            --card: #14203a;
-            --border: #243452;
-            --text: #e6edf7;
-            --muted: #9fb0c9;
+            --bg: #f5f6f9;
+            --surface: #ffffff;
+            --card: #ffffff;
+            --border: #e4e8f0;
+            --text: #111827;
+            --muted: #6b7280;
             --conservative: #4fc3f7;
             --tiered: #66bb6a;
             --tiered-classic: #ab47bc;
@@ -32,11 +32,17 @@ def render_dashboard() -> str:
             --tiered-hold: #9ccc65;
             --tiered-classic-hold: #ce93d8;
             --pulse: #ff5252;
-            --positive: #4caf50;
-            --negative: #ef5350;
+            --positive: #1f9d55;
+            --negative: #d14343;
         }
         * { box-sizing: border-box; }
-        body { margin: 0; font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        body {
+            margin: 0;
+            font-family: "SF Pro Display", "SF Pro Text", "Manrope", "Helvetica Neue", sans-serif;
+            background: radial-gradient(1200px 600px at 10% -20%, #ffffff 0%, var(--bg) 70%);
+            color: var(--text);
+            min-height: 100vh;
+        }
         .top-bar {
             display: grid; grid-template-columns: auto 1fr auto auto auto auto auto; gap: 12px; padding: 12px 20px;
             background: var(--surface); border-bottom: 1px solid var(--border);
@@ -45,15 +51,15 @@ def render_dashboard() -> str:
         .status-dot.running { background: var(--positive); }
         .status-dot.paused { background: var(--negative); }
         .mode-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
-        .mode-badge.paper { background: #2196f3; color: white; }
-        .mode-badge.live { background: #f44336; color: white; }
+        .mode-badge.paper { background: #dbeafe; color: #1e3a8a; }
+        .mode-badge.live { background: #fee2e2; color: #7f1d1d; }
         .live-games-panel {
             display: flex; gap: 12px; padding: 12px 20px; overflow-x: auto;
             background: var(--surface); border-bottom: 1px solid var(--border); min-height: 140px;
         }
         .game-card {
-            flex: 0 0 280px; padding: 12px; border-radius: 10px; border: 1px solid var(--border);
-            background: var(--card); min-width: 280px;
+            flex: 0 0 280px; padding: 12px; border-radius: 12px; border: 1px solid var(--border);
+            background: var(--card); min-width: 280px; box-shadow: 0 10px 24px rgba(18,24,38,0.08);
         }
         .game-card.profit { border-color: var(--positive); }
         .game-card.loss { border-color: var(--negative); }
@@ -70,16 +76,25 @@ def render_dashboard() -> str:
         .signal-dot.tiered-hold { background: var(--tiered-hold); }
         .signal-dot.tiered-classic-hold { background: var(--tiered-classic-hold); }
         .signal-dot.pulse { background: var(--pulse); }
-        .tab-nav { display: flex; gap: 6px; padding: 10px 20px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; flex-wrap: wrap; }
-        .tab-btn { padding: 6px 12px; border: 1px solid transparent; background: transparent; color: var(--muted); cursor: pointer; border-radius: 999px; font-weight: 600; font-size: 12px; }
-        .tab-btn:hover { background: rgba(255,255,255,0.04); color: var(--text); }
-        .tab-btn.active { background: rgba(255,255,255,0.08); border-color: var(--border); color: var(--text); }
+        .tab-nav {
+            display: flex; gap: 6px; padding: 10px 20px; background: var(--surface);
+            border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; flex-wrap: wrap;
+        }
+        .tab-btn {
+            padding: 6px 12px; border: 1px solid transparent; background: #f3f4f6; color: var(--text);
+            cursor: pointer; border-radius: 999px; font-weight: 600; font-size: 12px;
+        }
+        .tab-btn:hover { background: #e8ecf2; }
+        .tab-btn.active { background: #111827; border-color: #111827; color: #ffffff; }
         .tab-content { display: none; padding: 20px; min-height: 500px; }
         .tab-content.active { display: block; }
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 8px 24px rgba(5,10,25,0.25); }
+        .card {
+            background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px;
+            margin-bottom: 16px; box-shadow: 0 12px 30px rgba(18,24,38,0.08);
+        }
         .card-header { font-weight: 700; margin-bottom: 12px; font-size: 14px; letter-spacing: 0.2px; }
         .strategy-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .strategy-card { padding: 16px; border-radius: 8px; border: 1px solid var(--border); }
+        .strategy-card { padding: 16px; border-radius: 12px; border: 1px solid var(--border); background: #fbfcfe; }
         .strategy-card.conservative .card-header { color: var(--conservative); }
         .strategy-card.tiered .card-header { color: var(--tiered); }
         .strategy-card.tiered-classic .card-header { color: var(--tiered-classic); }
@@ -88,25 +103,25 @@ def render_dashboard() -> str:
         .strategy-card.tiered-hold .card-header { color: var(--tiered-hold); }
         .strategy-card.tiered-classic-hold .card-header { color: var(--tiered-classic-hold); }
         .strategy-card.pulse .card-header { color: var(--pulse); }
-        .overview-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; }
+        .overview-grid { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr); gap: 20px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
         th { background: var(--card); position: sticky; top: 0; }
-        tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+        tr:nth-child(even) { background: #f8fafc; }
         .positive { color: var(--positive); }
         .negative { color: var(--negative); }
-        .activity-feed { max-height: 300px; overflow-y: auto; }
+        .activity-feed { max-height: 360px; overflow-y: auto; }
         .activity-item { padding: 8px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
         .chart-container { position: relative; height: 250px; margin-bottom: 20px; }
         .stats-row { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
-        .stat-box { padding: 12px 16px; background: var(--surface); border-radius: 10px; border: 1px solid var(--border); }
+        .stat-box { padding: 12px 16px; background: #f8fafc; border-radius: 12px; border: 1px solid var(--border); }
         .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
         .stat-value { font-size: 18px; font-weight: bold; }
         .filter-bar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
-        .filter-bar select { padding: 6px 12px; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 8px; }
-        .export-btn { padding: 8px 16px; background: var(--tiered); color: #0b1325; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; }
+        .filter-bar select { padding: 6px 12px; background: #f8fafc; border: 1px solid var(--border); color: var(--text); border-radius: 8px; }
+        .export-btn { padding: 8px 16px; background: #111827; color: #ffffff; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; }
         .export-btn:hover { opacity: 0.9; }
-        .insight-card { padding: 12px; background: var(--surface); border-left: 4px solid var(--tiered); margin-bottom: 8px; font-size: 13px; color: var(--muted); }
+        .insight-card { padding: 12px; background: #f8fafc; border-left: 4px solid var(--tiered); margin-bottom: 8px; font-size: 13px; color: var(--muted); }
         .empty-state { padding: 40px; text-align: center; color: var(--muted); }
         .guide-section { margin-bottom: 32px; }
         .guide-section h2 { margin: 0 0 4px 0; font-size: 20px; }
@@ -115,10 +130,10 @@ def render_dashboard() -> str:
         .guide-section p, .guide-section li { font-size: 13px; line-height: 1.6; color: var(--muted); }
         .guide-section ul { padding-left: 20px; margin: 4px 0 8px 0; }
         .guide-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0; }
-        .guide-param { padding: 8px 12px; background: var(--surface); border-radius: 8px; font-size: 12px; }
+        .guide-param { padding: 8px 12px; background: #f8fafc; border-radius: 10px; font-size: 12px; }
         .guide-param .label { color: var(--muted); }
         .guide-param .value { color: var(--text); font-weight: bold; }
-        .guide-example { background: var(--surface); border-left: 3px solid var(--border); padding: 10px 14px; margin: 8px 0; font-size: 12px; line-height: 1.7; border-radius: 0 8px 8px 0; }
+        .guide-example { background: #f8fafc; border-left: 3px solid var(--border); padding: 10px 14px; margin: 8px 0; font-size: 12px; line-height: 1.7; border-radius: 0 10px 10px 0; }
         .guide-example .heading { color: var(--muted); font-weight: bold; margin-bottom: 4px; }
         .guide-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 6px; }
         .guide-badge.entry { background: #1b5e20; color: #a5d6a7; }
@@ -517,10 +532,6 @@ def render_dashboard() -> str:
         function updateTabOverview(s, trades, signals, performance, stats) {
             const risk = s.risk || {};
             const bankrolls = risk.bankrolls || {};
-            const today = new Date().toISOString().slice(0, 10);
-            const todayTrades = (trades || []).filter(t => (t.timestamp || '').slice(0, 10) === today);
-            const todaySignals = (signals || []).filter(sg => (sg.timestamp || '').slice(0, 10) === today);
-
             let html = '<div class="overview-grid"><div>';
             html += '<div class="strategy-cards">';
             for (const name of STRATEGIES) {
@@ -624,12 +635,12 @@ def render_dashboard() -> str:
             html += '<div class="card"><div class="card-header">Combined P&L Chart</div><div class="chart-container"><canvas id="chartOverview"></canvas></div></div>';
             html += '</div><div>';
 
-            html += '<div class="card"><div class="card-header">Today' + "'" + 's Activity</div><div class="activity-feed">';
+            html += '<div class="card"><div class="card-header">All Activity (Latest 200)</div><div class="activity-feed">';
             const combined = [
-                ...todayTrades.map(t => ({ ...t, type: 'trade', sort: new Date(t.timestamp).getTime() })),
-                ...todaySignals.filter(sg => sg.action_taken).map(sg => ({ ...sg, type: 'signal', sort: new Date(sg.timestamp).getTime() }))
-            ].sort((a, b) => b.sort - a.sort).slice(0, 30);
-            if (combined.length === 0) html += '<div class="empty-state">No activity today</div>';
+                ...trades.map(t => ({ ...t, type: 'trade', sort: new Date(t.timestamp).getTime() })),
+                ...signals.filter(sg => sg.action_taken).map(sg => ({ ...sg, type: 'signal', sort: new Date(sg.timestamp).getTime() }))
+            ].filter(x => !Number.isNaN(x.sort)).sort((a, b) => b.sort - a.sort).slice(0, 200);
+            if (combined.length === 0) html += '<div class="empty-state">No activity yet</div>';
             else combined.forEach(x => {
                 const pnl = x.pnl_cents;
                 const cls = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
@@ -637,12 +648,14 @@ def render_dashboard() -> str:
             });
             html += '</div></div>';
 
-            html += '<div class="card"><div class="card-header">Comparison</div><table><thead><tr><th></th><th>Conservative</th><th>Tiered V2</th><th>Tiered Classic</th><th>Heavy Fav</th></tr></thead><tbody>';
+            html += '<div class="card"><div class="card-header">Comparison</div><table><thead><tr><th></th>';
+            STRATEGIES.forEach(st => { html += '<th>' + (STRATEGY_LABELS[st] || st) + '</th>'; });
+            html += '</tr></thead><tbody>';
             const rows = ['win_rate','avg_win','avg_loss','best_trade','worst_trade','total_pnl'];
             const labels = ['Win Rate','Avg Win','Avg Loss','Best','Worst','Total P&L'];
             rows.forEach((r, i) => {
                 html += `<tr><td>${labels[i]}</td>`;
-                ['CONSERVATIVE','TIERED','TIERED_CLASSIC','HEAVY_FAVORITE'].forEach(st => {
+                STRATEGIES.forEach(st => {
                     const v = (stats[st] || {})[r];
                     const disp = r === 'win_rate' ? fmtPct(v) : fmt(v);
                     const cls = (r === 'total_pnl' || r === 'avg_win' || r === 'best_trade') && v > 0 ? 'positive' : (v < 0 ? 'negative' : '');
@@ -712,8 +725,8 @@ def render_dashboard() -> str:
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     scales: {
-                        x: { grid: { color: 'rgba(255,255,255,0.1)' } },
-                        y: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { callback: v => '$' + v.toFixed(2) } }
+                        x: { grid: { color: 'rgba(17,24,39,0.08)' } },
+                        y: { grid: { color: 'rgba(17,24,39,0.08)' }, ticks: { callback: v => '$' + v.toFixed(2) } }
                     },
                     plugins: { tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': $' + ctx.parsed.y.toFixed(2) } } }
                 }
