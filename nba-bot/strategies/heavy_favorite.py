@@ -80,9 +80,7 @@ class HeavyFavoriteStrategy(BaseStrategy):
 
         # 1. Quarter must be 1 or early Q2
         if state.quarter > HF_MAX_ENTRY_QUARTER:
-            if not (next_entry == 2 and state.quarter == 3 and
-                    state.time_remaining_seconds >= TIER_ENTRY2_Q3_WINDOW_SEC):
-                return None
+            return None
         if state.quarter == 2 and state.time_remaining_seconds < HF_ENTRY1_MIN_TIME_LEFT_Q2_SEC:
             return None
 

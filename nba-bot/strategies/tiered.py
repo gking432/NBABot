@@ -77,9 +77,6 @@ class TieredStrategy(BaseStrategy):
             return None
         if state.deficit_vs_spread < TIER_MIN_DEFICIT_VS_SPREAD:
             return None
-        if state.price_drop_from_tipoff < TIER_MIN_PRICE_DROP_PCT:
-            return None
-
         ask_price = state.kalshi_yes_ask
         if ask_price is None or ask_price > TIER_MAX_ENTRY_PRICE_CENTS:
             return None

@@ -1194,10 +1194,11 @@ def render_dashboard() -> str:
 <div class="card guide-section">
     <h2 style="color:var(--tiered)">Tiered V2 (Regime-Aware)</h2>
     <ul>
-        <li>Base entry gates: spread 1-7, deficit_vs_spread &ge; 10, drop from tipoff &ge; 25%, ask &le; 35&cent;, depth &ge; 50, Q1-Q2 only.</li>
+        <li>Base entry gates: spread 1-7, deficit_vs_spread &ge; 10, ask &le; 35&cent;, depth &ge; 50, Q1-Q2 only. No minimum tipoff drop for Entry 1.</li>
         <li>Close-spread regime (&le; 3.5): scalp-only, max 2 entries, TP1 at avg+6&cent;, TP2 at min(avg+10&cent;, 42&cent;), stop at -18%, time-stop in Q3 (&lt;300s).</li>
         <li>Mid-spread regime (&gt; 3.5): recovery logic. Entry 3+ requires stronger spread (&ge; 6.0).</li>
-        <li>Q3 Entry-2 window (first 6 minutes): allows a second entry if price drops &ge; 15% from Entry 1 and depth &ge; 50. No extra deficit growth required in that window.</li>
+        <li>Entry 2 requires additional price drop; no extra deficit growth required.</li>
+        <li>Q3 Entry-2 window (first 6 minutes): allows a second entry if price drops &ge; 15% from Entry 1 and depth &ge; 50.</li>
         <li>Standard exits: +17.5% partial then 40&cent; target when avg&lt;30&cent;; otherwise 48&cent; target.</li>
         <li>3+ entry positions switch to capital recovery mode with breakeven exit plus dedicated recovery stop.</li>
         <li>Tail risk controls: universal max-loss cap per position plus Q3+ dynamic stop geometry and Q4 time exit (&lt;300s).</li>
@@ -1225,7 +1226,7 @@ def render_dashboard() -> str:
         <li>Entry 1 gates: spread &ge; 8, deficit_vs_spread &ge; 15, ask &le; 30&cent;, depth &ge; 50, Q1 or early Q2 (at least 8 min left).</li>
         <li>Spread-scaled sizing multipliers: 1.0x (8-10), 1.25x (10-12), 1.5x (12+).</li>
         <li>Entry 3+ is restricted to stronger favorites only (spread &ge; 10).</li>
-        <li>Q3 Entry-2 window (first 6 minutes): allows a second entry if price drops &ge; 15% from Entry 1 and depth &ge; 50.</li>
+        <li>Entry 2 requires additional price drop; Q3 Entry-2 window (first 6 minutes) allows the second entry if price drops &ge; 15% from Entry 1 and depth &ge; 50.</li>
         <li>Exits: 2.0x capital recovery (35%), 3.0x house-money-1 (20%), 60&cent; house-money-2 (20%), 40% trailing stop.</li>
         <li>Risk controls: universal max-loss cap and defensive hard-floor / sell-into-strength behavior.</li>
         <li>Max concurrent positions: 2.</li>

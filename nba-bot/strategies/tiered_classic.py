@@ -71,16 +71,11 @@ class TieredClassicStrategy(BaseStrategy):
 
     def _check_first_entry(self, state: LiveGameState) -> Optional[EntrySignal]:
         if state.quarter > TIER_MAX_ENTRY_QUARTER:
-            if not (next_entry == 2 and state.quarter == 3 and
-                    state.time_remaining_seconds >= TIER_ENTRY2_Q3_WINDOW_SEC):
-                return None
+            return None
         if not (TIER_MIN_SPREAD <= state.opening_spread <= TIER_MAX_SPREAD):
             return None
         if state.deficit_vs_spread < TIER_MIN_DEFICIT_VS_SPREAD:
             return None
-        if state.price_drop_from_tipoff < TIER_MIN_PRICE_DROP_PCT:
-            return None
-
         ask_price = state.kalshi_yes_ask
         if ask_price is None or ask_price > TIER_CLASSIC_MAX_ENTRY_PRICE_CENTS:
             return None
