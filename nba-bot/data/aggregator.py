@@ -211,9 +211,9 @@ class DataAggregator:
 
                 self._calculate_derived_signals(state)
             else:
-                logger.debug(
-                    f"No odds match for {state.home_team} vs {state.away_team}"
-                )
+                # Fallback: derive fair value from Kalshi prices when no odds source matches.
+                # Kalshi yes_ask IS the market-implied probability for the yes team.
+                self._apply_kalshi_fallback(state)
 
         logger.info(f"Odds update: matched {matched_count}/{len(self.games)} games")
 
@@ -268,8 +268,11 @@ class DataAggregator:
                     depth = self.kalshi.get_orderbook_depth_at_ask(ticker)
                     state.kalshi_book_depth = depth
 
-                # Recalculate derived signals
-                self._calculate_derived_signals(state)
+                # If no fair value from BetStack/Odds, derive from Kalshi prices
+                if state.fair_value_home is None and ask is not None:
+                    self._apply_kalshi_fallback(state)
+                else:
+                    self._calculate_derived_signals(state)
 
                 logger.debug(
                     f"Kalshi {ticker}: bid={bid} ask={ask} last={last} "
@@ -354,6 +357,81 @@ class DataAggregator:
             logger.info(
                 f"Tipoff price for {state.kalshi_market_ticker}: {state.kalshi_yes_ask}¢"
             )
+
+    # ─────────────────────────────────────────
+    # Kalshi-Based Fallback (when BetStack/Odds API fail to match)
+    # ─────────────────────────────────────────
+
+    def _apply_kalshi_fallback(self, state: LiveGameState):
+        """
+        When no odds source matches a game, derive fair value and spread
+        from Kalshi's own market prices. Kalshi yes_ask is the market-implied
+        probability for the yes team (the favorite).
+        """
+        if not state.kalshi_market_ticker or state.kalshi_yes_ask is None:
+            return
+
+        ask_cents = state.kalshi_yes_ask
+        fav_prob = ask_cents / 100.0  # e.g., 62¢ → 0.62
+
+        if fav_prob <= 0 or fav_prob >= 1:
+            return
+
+        # Set fair values based on which team "yes" represents
+        if state.kalshi_yes_team == state.home_team:
+            state.fair_value_home = fav_prob
+            state.fair_value_away = 1.0 - fav_prob
+        elif state.kalshi_yes_team == state.away_team:
+            state.fair_value_home = 1.0 - fav_prob
+            state.fair_value_away = fav_prob
+        else:
+            # Default: yes = home
+            state.fair_value_home = fav_prob
+            state.fair_value_away = 1.0 - fav_prob
+
+        state.last_odds_update = datetime.utcnow()
+
+        # Estimate spread from Kalshi probability if ESPN didn't provide one.
+        # NBA rule of thumb: each point of spread ≈ 2.5-3% probability shift.
+        # 50% = pick'em (spread 0), 60% ≈ spread 3, 70% ≈ spread 6, 80% ≈ spread 10
+        if state.opening_spread == 0:
+            estimated_spread = self._probability_to_spread(fav_prob)
+            if estimated_spread > 0:
+                state.opening_spread = estimated_spread
+                # Favorite is already set from ESPN or Kalshi match
+                # But fix it if it's still default (home_team)
+                if state.kalshi_yes_team and state.favorite != state.kalshi_yes_team:
+                    state.favorite = state.kalshi_yes_team
+                    state.underdog = (
+                        state.away_team if state.kalshi_yes_team == state.home_team
+                        else state.home_team
+                    )
+                logger.info(
+                    f"Kalshi fallback spread for {state.home_team} vs {state.away_team}: "
+                    f"spread={estimated_spread:.1f} (from {ask_cents}¢ Kalshi ask), "
+                    f"favorite={state.favorite}"
+                )
+
+        self._calculate_derived_signals(state)
+        logger.info(
+            f"Kalshi fallback fair value for {state.home_team} vs {state.away_team}: "
+            f"fv_home={state.fair_value_home:.3f}, fv_away={state.fair_value_away:.3f}, "
+            f"spread={state.opening_spread}"
+        )
+
+    @staticmethod
+    def _probability_to_spread(prob: float) -> float:
+        """
+        Convert win probability to approximate NBA point spread.
+        Based on historical NBA data: ~2.8% per point of spread.
+        Returns absolute spread value (always positive).
+        """
+        if prob <= 0.5:
+            return 0.0
+        # Logit-based conversion: spread ≈ (prob - 0.5) / 0.028
+        # Capped at reasonable NBA range
+        spread = (prob - 0.5) / 0.028
+        return round(min(spread, 20.0), 1)
 
     # ─────────────────────────────────────────
     # Derived Signal Calculations
