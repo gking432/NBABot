@@ -100,7 +100,10 @@ class BetStackClient:
             self._last_odds = odds_by_game
             self._last_fetch_time = datetime.utcnow()
 
-            logger.info(f"BetStack: fetched odds for {len(odds_by_game)} NBA games")
+            logger.info(
+                f"BetStack: fetched odds for {len(odds_by_game)} NBA games"
+                + (f" — keys: {list(odds_by_game.keys())}" if odds_by_game else "")
+            )
             return odds_by_game
 
         except requests.exceptions.RequestException as e:
@@ -248,11 +251,28 @@ class BetStackClient:
                 "timestamp": odds.get("timestamp"),
             }
 
+        # Fallback: iterate all cached odds and normalize
         for cached_key, odds in self._last_odds.items():
             if (normalize_team_name(odds["home_team"]) == home and
                     normalize_team_name(odds["away_team"]) == away):
                 return odds
+            # Also check reverse
+            if (normalize_team_name(odds["home_team"]) == away and
+                    normalize_team_name(odds["away_team"]) == home):
+                return {
+                    "home_team": home,
+                    "away_team": away,
+                    "fair_value_home": odds.get("fair_value_away"),
+                    "fair_value_away": odds.get("fair_value_home"),
+                    "current_spread": -odds.get("current_spread", 0) if odds.get("current_spread") else None,
+                    "num_bookmakers": odds.get("num_bookmakers", 0),
+                    "timestamp": odds.get("timestamp"),
+                }
 
+        logger.debug(
+            f"No BetStack odds match for {home} vs {away} — "
+            f"cached keys: {list(self._last_odds.keys())}"
+        )
         return None
 
     @property

@@ -445,12 +445,15 @@ def render_dashboard() -> str:
                     const val = (pos.shares_remaining || 0) * bid;
                     borderClass = val > cost ? 'profit' : 'loss';
                 }
+                const priceDisplay = g.kalshi_bid != null || g.kalshi_ask != null
+                    ? `Bid: ${g.kalshi_bid ?? '—'}¢ / Ask: ${g.kalshi_ask ?? '—'}¢`
+                    : (g.kalshi_last != null ? `Last: ${g.kalshi_last}¢` : (g.kalshi_ticker ? 'Matched (no quotes)' : 'No Kalshi market'));
                 return `
                     <div class="game-card ${borderClass}">
                         <div class="game-score">${g.away_team || 'Away'} ${g.away_score || 0} @ ${g.home_team || 'Home'} ${g.home_score || 0}</div>
-                        <div class="game-meta">Q${g.quarter || '?'} ${Math.floor((g.time_remaining || 0) / 60)}:${String((g.time_remaining || 0) % 60).padStart(2,'0')} | Spread: ${g.spread ?? '—'}</div>
+                        <div class="game-meta">Q${g.quarter || '?'} ${Math.floor((g.time_remaining || 0) / 60)}:${String((g.time_remaining || 0) % 60).padStart(2,'0')} | Spread: ${g.spread || '—'} | ${g.favorite || '—'}</div>
                         <div class="game-stats">
-                            <span>Bid: ${g.kalshi_bid ?? '—'}¢ / Ask: ${g.kalshi_ask ?? '—'}¢</span>
+                            <span>${priceDisplay}</span>
                             <span class="${(g.price_drop_pct || 0) < 0 ? 'negative' : ''}">Drop: ${g.price_drop_pct ?? '—'}%</span>
                             <span>Fair: ${g.fair_value ?? '—'}%</span>
                             <span class="${(g.edge || 0) > 0 ? 'positive' : ''}">Edge: ${g.edge != null ? '+' : ''}${g.edge ?? '—'}%</span>
@@ -566,7 +569,7 @@ def render_dashboard() -> str:
                 let totalCost = 0;
                 const posData = activePositions.map(pos => {
                     const game = gamesByIdOP[pos.game_id];
-                    const currentPrice = game ? (game.kalshi_bid || game.kalshi_ask || 0) : 0;
+                    const currentPrice = game ? (game.kalshi_bid || game.kalshi_ask || game.kalshi_last || 0) : 0;
                     const avg = pos.avg_cost_cents || 0;
                     const shares = pos.shares_remaining || 0;
                     const remainingCost = Math.round(shares * avg);
