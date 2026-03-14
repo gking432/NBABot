@@ -21,14 +21,18 @@ class BetStackClient:
 
     def __init__(self):
         self.api_key = BETSTACK_API_KEY
-        self.session = requests.Session()
-        self.session.headers["X-API-Key"] = self.api_key
-
         self.requests_remaining: Optional[int] = None
         self.requests_used: int = 0
 
         self._last_odds: Dict[str, dict] = {}
         self._last_fetch_time: Optional[datetime] = None
+
+        self._init_session()
+
+    def _init_session(self):
+        """Create fresh session. Call after connection errors to recover from stale connections."""
+        self.session = requests.Session()
+        self.session.headers["X-API-Key"] = self.api_key
 
     def _extract_team_name(self, team_field) -> str:
         """Extract team name whether it's a string or an object with a 'name' key."""
@@ -101,6 +105,7 @@ class BetStackClient:
 
         except requests.exceptions.RequestException as e:
             logger.warning(f"BetStack request failed: {e}")
+            self._init_session()
             return self._last_odds
         except Exception as e:
             logger.error(f"BetStack error: {e}")
@@ -127,6 +132,10 @@ class BetStackClient:
             if resp.status_code != 200:
                 return None
             return self._process_event(resp.json())
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            logger.debug(f"BetStack event {event_id} detail failed: {e}")
+            self._init_session()
+            return None
         except Exception as e:
             logger.debug(f"BetStack event {event_id} detail failed: {e}")
             return None

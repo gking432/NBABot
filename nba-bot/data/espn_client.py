@@ -18,11 +18,15 @@ class ESPNClient:
     """Fetches live NBA scores from ESPN's free API."""
 
     def __init__(self):
+        self._espn_available = True
+        self._init_session()
+
+    def _init_session(self):
+        """Create fresh session. Call after connection errors to recover from stale connections."""
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (compatible; NBABot/1.0)"
         })
-        self._espn_available = True
 
     def get_live_games(self) -> List[dict]:
         """
@@ -69,6 +73,7 @@ class ESPNClient:
         except requests.exceptions.RequestException as e:
             logger.warning(f"ESPN request failed: {e}")
             self._espn_available = False
+            self._init_session()  # Recover from stale connection
             return None
         except (KeyError, ValueError) as e:
             logger.error(f"ESPN parse error: {e}")
@@ -193,6 +198,7 @@ class ESPNClient:
 
         except Exception as e:
             logger.error(f"NBA CDN fetch failed: {e}")
+            self._init_session()  # Recover from stale connection
             return None
 
     def _parse_nba_cdn_game(self, game_data: dict) -> Optional[dict]:

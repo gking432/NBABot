@@ -1,4 +1,8 @@
-"""Entry point for the NBA Trading Bot."""
+"""Entry point for the NBA Trading Bot.
+
+To prevent Mac sleep while the bot runs (recommended for 24/7 operation):
+    caffeinate -i python run.py
+"""
 import logging
 import sys
 import os
@@ -81,6 +85,9 @@ def start_dashboard(bot):
 def main():
     acquire_lock()
     setup_logging()
+
+    if sys.platform == "darwin":
+        logging.info("Tip: run with 'caffeinate -i python run.py' to prevent Mac sleep")
 
     from core.bot import TradingBot
     bot = TradingBot()

@@ -49,18 +49,24 @@ class DataAggregator:
         self._last_espn_update = 0.0
         self._last_odds_update = 0.0
         self._last_kalshi_update = 0.0
+        self._kalshi_update_count = 0  # Fetch orderbook every 2nd update to reduce API calls
 
     def initialize(self):
         """
         Run once at startup.
         Discover Kalshi NBA markets and map them to teams.
+        Skips opening prices to avoid Kalshi rate limits (38+ extra API calls).
         """
         logger.info("Initializing data aggregator...")
-        self._discover_kalshi_markets()
+        self._discover_kalshi_markets(fetch_opening_prices=False)
         logger.info(f"Found {len(self.kalshi_market_map)} Kalshi NBA markets")
 
-    def _discover_kalshi_markets(self):
-        """Find all open NBA winner markets on Kalshi and map to team names."""
+    def _discover_kalshi_markets(self, fetch_opening_prices: bool = True):
+        """
+        Find all open NBA winner markets on Kalshi and map to team names.
+        fetch_opening_prices: if True, call get_opening_price per market (44+ API calls).
+        Only do this at initialize; rediscover skips it to avoid Kalshi rate limits.
+        """
         markets = self.kalshi.discover_nba_winner_markets()
 
         for ticker, market_data in markets.items():
@@ -73,10 +79,10 @@ class DataAggregator:
             # This is a best-effort extraction — may need refinement
             self.kalshi_market_map[ticker] = market_data
 
-            # Try to get opening price
-            opening = self.kalshi.get_opening_price(ticker)
-            if opening:
-                self._opening_prices[ticker] = opening
+            if fetch_opening_prices:
+                opening = self.kalshi.get_opening_price(ticker)
+                if opening:
+                    self._opening_prices[ticker] = opening
 
         logger.info(f"Kalshi market map: {list(self.kalshi_market_map.keys())}")
 
@@ -84,12 +90,22 @@ class DataAggregator:
         """
         Re-discover Kalshi NBA markets and re-match games that don't have a ticker.
         Call periodically — markets may appear when games are about to start.
+        Does NOT fetch opening prices (44+ extra API calls) — avoids Kalshi rate limits.
+        Also refreshes bid/ask from discover data (no extra API calls).
         """
-        self._discover_kalshi_markets()
+        self._discover_kalshi_markets(fetch_opening_prices=False)
         # Re-match any games that don't have a Kalshi market yet
         for state in self.games.values():
             if not state.kalshi_market_ticker:
                 self._match_kalshi_market(state)
+            elif state.kalshi_market_ticker in self.kalshi_market_map:
+                # Refresh bid/ask from fresh discover data (no extra API calls)
+                md = self.kalshi_market_map[state.kalshi_market_ticker]
+                state.kalshi_yes_bid = md.get("yes_bid")
+                state.kalshi_yes_ask = md.get("yes_ask")
+                state.kalshi_last_price = md.get("last_price")
+                state.last_kalshi_update = datetime.utcnow()
+                self._calculate_derived_signals(state)
 
     def update_scores(self) -> List[LiveGameState]:
         """
@@ -184,7 +200,11 @@ class DataAggregator:
         """
         Fetch latest Kalshi prices for all matched markets.
         Call this every 10-15 seconds.
+        Fetches orderbook only every 2nd update to reduce API calls and avoid rate limits.
         """
+        self._kalshi_update_count += 1
+        fetch_orderbook = (self._kalshi_update_count % 2) == 0
+
         for game_id, state in self.games.items():
             if not state.kalshi_market_ticker:
                 continue
@@ -211,9 +231,10 @@ class DataAggregator:
                 if ticker in self._tipoff_prices:
                     state.kalshi_tipoff_price = self._tipoff_prices[ticker]
 
-                # Order book depth
-                depth = self.kalshi.get_orderbook_depth_at_ask(ticker)
-                state.kalshi_book_depth = depth
+                # Order book depth (every 2nd update to cut Kalshi API calls in half)
+                if fetch_orderbook:
+                    depth = self.kalshi.get_orderbook_depth_at_ask(ticker)
+                    state.kalshi_book_depth = depth
 
                 # Recalculate derived signals
                 self._calculate_derived_signals(state)
@@ -246,6 +267,12 @@ class DataAggregator:
                 state.kalshi_market_ticker = ticker
                 state.kalshi_event_ticker = market_data.get("event_ticker")
                 state.kalshi_yes_team = state.favorite
+                # Use bid/ask from discover data so dashboard shows prices immediately
+                state.kalshi_yes_bid = market_data.get("yes_bid")
+                state.kalshi_yes_ask = market_data.get("yes_ask")
+                state.kalshi_last_price = market_data.get("last_price")
+                state.last_kalshi_update = datetime.utcnow()
+                self._calculate_derived_signals(state)
                 logger.info(
                     f"Matched {state.home_team} vs {state.away_team} → {ticker} (yes={fav_abbrev})"
                 )

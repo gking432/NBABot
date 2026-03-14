@@ -26,13 +26,17 @@ class KalshiClient:
         self.base_url = KALSHI_BASE_URL
         self.api_key_id = KALSHI_API_KEY_ID
         self.private_key = self._load_private_key()
+        self._init_session()
+
+    def _init_session(self):
+        """Create fresh session. Call after connection errors to recover from stale connections."""
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json"})
 
         # Rate limiting: 10 reads/sec, 5 writes/sec
         self._last_read_time = 0.0
         self._last_write_time = 0.0
-        self._read_interval = 0.15   # 150ms between reads (avoids 429s on production)
+        self._read_interval = 0.25   # 250ms between reads (avoids 429s)
         self._write_interval = 0.2   # 200ms between writes
 
         # Cache to avoid redundant calls
@@ -137,9 +141,11 @@ class KalshiClient:
 
             except requests.exceptions.Timeout:
                 logger.warning(f"Kalshi GET {path} timed out (attempt {attempt + 1})")
+                self._init_session()
                 time.sleep(1)
             except requests.exceptions.ConnectionError:
                 logger.error(f"Kalshi connection error for {path}")
+                self._init_session()
                 time.sleep(2)
 
         logger.error(f"Kalshi GET {path} failed after 3 attempts")
@@ -159,6 +165,10 @@ class KalshiClient:
             else:
                 logger.warning(f"Kalshi POST {path} returned {resp.status_code}: {resp.text[:200]}")
                 return None
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            logger.error(f"Kalshi POST {path} error: {e}")
+            self._init_session()
+            return None
         except Exception as e:
             logger.error(f"Kalshi POST {path} error: {e}")
             return None

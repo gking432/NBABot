@@ -129,6 +129,9 @@ class TradingBot:
         # Discover Kalshi NBA markets
         self.aggregator.initialize()
 
+        # Brief pause so Kalshi rate limit can reset after discover
+        time.sleep(2)
+
         # Initial data fetch
         logger.info("Fetching initial data...")
         self.aggregator.update_scores()
@@ -138,6 +141,13 @@ class TradingBot:
         games = self.aggregator.get_live_games()
         live_games = [g for g in games if g.game_status == GameStatus.LIVE]
         logger.info(f"Found {len(games)} total games, {len(live_games)} live")
+
+        # Don't re-fetch on first loop — prevents BetStack/Kalshi rate limits
+        now = time.time()
+        self._last_espn_update = now
+        self._last_odds_update = now
+        self._last_kalshi_update = now
+        self._last_kalshi_rediscover = now
 
         self.running = True
         logger.info("Initialization complete. Starting main loop.")
@@ -401,6 +411,8 @@ class TradingBot:
 
     def _game_to_dict(self, state: LiveGameState) -> dict:
         """Convert LiveGameState to dict for API/dashboard."""
+        # Prefer current spread (BetStack) when available, else opening spread (ESPN)
+        spread = state.current_spread if state.current_spread is not None else state.opening_spread
         return {
             "game_id": state.game_id_espn,
             "home_team": state.home_team,
@@ -410,7 +422,7 @@ class TradingBot:
             "quarter": state.quarter,
             "time_remaining": state.time_remaining_seconds,
             "status": state.game_status.value,
-            "spread": state.opening_spread,
+            "spread": spread,
             "favorite": state.favorite,
             "kalshi_bid": state.kalshi_yes_bid,
             "kalshi_ask": state.kalshi_yes_ask,
