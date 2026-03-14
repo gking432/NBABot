@@ -223,13 +223,13 @@ class KalshiClient:
                         "event_ticker": event_ticker,
                         "title": market.get("title", ""),
                         "subtitle": market.get("subtitle", ""),
-                        "yes_bid": market.get("yes_bid"),
-                        "yes_ask": market.get("yes_ask"),
-                        "no_bid": market.get("no_bid"),
-                        "no_ask": market.get("no_ask"),
-                        "last_price": market.get("last_price"),
-                        "volume_24h": market.get("volume_24h", 0),
-                        "open_interest": market.get("open_interest", 0),
+                        "yes_bid": self._dollars_to_cents(market.get("yes_bid_dollars")),
+                        "yes_ask": self._dollars_to_cents(market.get("yes_ask_dollars")),
+                        "no_bid": self._dollars_to_cents(market.get("no_bid_dollars")),
+                        "no_ask": self._dollars_to_cents(market.get("no_ask_dollars")),
+                        "last_price": self._dollars_to_cents(market.get("last_price_dollars")),
+                        "volume_24h": market.get("volume_24h_fp", market.get("volume_24h", 0)),
+                        "open_interest": market.get("open_interest_fp", market.get("open_interest", 0)),
                         "status": market.get("status", ""),
                     }
 
@@ -247,48 +247,98 @@ class KalshiClient:
             return result["market"]
         return None
 
+    @staticmethod
+    def _dollars_to_cents(value) -> Optional[int]:
+        """Convert a dollar string like '0.5600' to integer cents (56). Returns None if invalid."""
+        if value is None:
+            return None
+        try:
+            return int(round(float(value) * 100))
+        except (ValueError, TypeError):
+            return None
+
     def get_market_prices(self, ticker: str) -> Optional[dict]:
-        """Get just the price data we need. Returns dict with yes_bid, yes_ask, etc."""
+        """Get just the price data we need. Returns dict with yes_bid, yes_ask, etc. (in cents)."""
         market = self.get_market(ticker)
         if not market:
             return None
 
+        # Kalshi API v2 uses _dollars fields (string dollar amounts like "0.56")
+        # Legacy integer cent fields (yes_bid, yes_ask, etc.) were removed 2026-03-12
+        yes_bid = self._dollars_to_cents(market.get("yes_bid_dollars"))
+        yes_ask = self._dollars_to_cents(market.get("yes_ask_dollars"))
+        no_bid = self._dollars_to_cents(market.get("no_bid_dollars"))
+        no_ask = self._dollars_to_cents(market.get("no_ask_dollars"))
+        last_price = self._dollars_to_cents(market.get("last_price_dollars"))
+
+        logger.debug(
+            f"Kalshi prices for {ticker}: yes_bid={yes_bid} yes_ask={yes_ask} "
+            f"last={last_price} (raw: bid_d={market.get('yes_bid_dollars')} "
+            f"ask_d={market.get('yes_ask_dollars')} last_d={market.get('last_price_dollars')})"
+        )
+
         return {
-            "yes_bid": market.get("yes_bid"),     # cents
-            "yes_ask": market.get("yes_ask"),     # cents
-            "no_bid": market.get("no_bid"),
-            "no_ask": market.get("no_ask"),
-            "last_price": market.get("last_price"),
-            "volume": market.get("volume_24h", 0),
-            "open_interest": market.get("open_interest", 0),
+            "yes_bid": yes_bid,
+            "yes_ask": yes_ask,
+            "no_bid": no_bid,
+            "no_ask": no_ask,
+            "last_price": last_price,
+            "volume": market.get("volume_24h_fp", market.get("volume_24h", 0)),
+            "open_interest": market.get("open_interest_fp", market.get("open_interest", 0)),
             "status": market.get("status", ""),
         }
 
     def get_orderbook(self, ticker: str) -> Optional[dict]:
         """
         Get order book depth.
-        Returns: {yes: [[price, qty], ...], no: [[price, qty], ...]}
+        Returns: {yes: [[price_cents, qty], ...], no: [[price_cents, qty], ...]}
+        Converts from new API format (orderbook_fp with dollar strings) to cents/int.
         """
         result = self._get(f"/markets/{ticker}/orderbook")
-        if result and "orderbook" in result:
-            return result["orderbook"]
-        return None
+        if not result:
+            return None
+
+        # New format: orderbook_fp with yes_dollars / no_dollars arrays of string pairs
+        book = result.get("orderbook_fp") or result.get("orderbook")
+        if not book:
+            return None
+
+        def parse_levels(key_dollars, key_legacy):
+            levels = book.get(key_dollars) or book.get(key_legacy) or []
+            parsed = []
+            for level in levels:
+                if isinstance(level, list) and len(level) >= 2:
+                    try:
+                        price_cents = int(round(float(level[0]) * 100))
+                        qty = int(round(float(level[1])))
+                        parsed.append([price_cents, qty])
+                    except (ValueError, TypeError):
+                        continue
+                elif isinstance(level, dict):
+                    parsed.append(level)
+            return parsed
+
+        return {
+            "yes": parse_levels("yes_dollars", "yes"),
+            "no": parse_levels("no_dollars", "no"),
+        }
 
     def get_orderbook_depth_at_ask(self, ticker: str, levels: int = 5) -> int:
         """
-        Get total quantity available in the top N ask levels.
-        This tells us how many contracts we can actually buy near the current price.
+        Get total quantity available in the top N ask levels (no side bids = yes asks).
+        In binary markets, no bids at price X = yes asks at (100-X).
         """
         book = self.get_orderbook(ticker)
         if not book:
             return 0
 
-        yes_levels = book.get("yes") or []
-        if not isinstance(yes_levels, list):
+        # No-side bids represent yes-side asks (you can buy yes by matching no bids)
+        no_levels = book.get("no") or []
+        if not isinstance(no_levels, list):
             return 0
 
         total_depth = 0
-        for i, level in enumerate(yes_levels[:levels]):
+        for i, level in enumerate(no_levels[:levels]):
             if isinstance(level, list) and len(level) >= 2:
                 total_depth += level[1]
             elif isinstance(level, dict):
@@ -323,6 +373,10 @@ class KalshiClient:
         # We want the oldest trade = the opening price
         oldest = trades[-1] if trades else None
         if oldest:
+            # New API uses yes_price_dollars; fallback to yes_price for compat
+            dollars = oldest.get("yes_price_dollars")
+            if dollars is not None:
+                return self._dollars_to_cents(dollars)
             return oldest.get("yes_price")
         return None
 
@@ -342,6 +396,9 @@ class KalshiClient:
         Place a limit order on Kalshi.
         ONLY used in live trading mode (Week 4+).
         """
+        # Convert cents to dollar string for new API
+        price_dollars = f"{price_cents / 100:.4f}"
+
         body = {
             "ticker": ticker,
             "action": action,
@@ -350,11 +407,11 @@ class KalshiClient:
             "type": "limit",
         }
 
-        # Price field name depends on side
+        # Price field name depends on side — use _dollars fields
         if side == "yes":
-            body["yes_price"] = price_cents
+            body["yes_price_dollars"] = price_dollars
         else:
-            body["no_price"] = price_cents
+            body["no_price_dollars"] = price_dollars
 
         result = self._post("/portfolio/orders", body)
         if result:
