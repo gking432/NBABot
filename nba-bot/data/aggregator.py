@@ -49,7 +49,7 @@ class DataAggregator:
         self._last_espn_update = 0.0
         self._last_odds_update = 0.0
         self._last_kalshi_update = 0.0
-        self._kalshi_update_count = 0  # Fetch orderbook every 2nd update to reduce API calls
+        self._kalshi_update_count = -1  # Start at -1 so first update (count=0) fetches orderbook
 
     def initialize(self):
         """
@@ -91,21 +91,13 @@ class DataAggregator:
         Re-discover Kalshi NBA markets and re-match games that don't have a ticker.
         Call periodically — markets may appear when games are about to start.
         Does NOT fetch opening prices (44+ extra API calls) — avoids Kalshi rate limits.
-        Also refreshes bid/ask from discover data (no extra API calls).
+        Does NOT overwrite live prices — update_kalshi_prices() handles that.
         """
         self._discover_kalshi_markets(fetch_opening_prices=False)
         # Re-match any games that don't have a Kalshi market yet
         for state in self.games.values():
             if not state.kalshi_market_ticker:
                 self._match_kalshi_market(state)
-            elif state.kalshi_market_ticker in self.kalshi_market_map:
-                # Refresh bid/ask from fresh discover data (no extra API calls)
-                md = self.kalshi_market_map[state.kalshi_market_ticker]
-                state.kalshi_yes_bid = md.get("yes_bid")
-                state.kalshi_yes_ask = md.get("yes_ask")
-                state.kalshi_last_price = md.get("last_price")
-                state.last_kalshi_update = datetime.utcnow()
-                self._calculate_derived_signals(state)
 
     def update_scores(self) -> List[LiveGameState]:
         """
@@ -180,6 +172,7 @@ class DataAggregator:
             logger.warning("No odds source available — using cached values")
             return
 
+        matched_count = 0
         for game_id, state in self.games.items():
             game_odds = None
             if odds_source == "betstack":
@@ -188,42 +181,81 @@ class DataAggregator:
                 game_odds = self.odds.find_game_odds(state.home_team, state.away_team)
 
             if game_odds:
+                matched_count += 1
                 state.fair_value_home = game_odds.get("fair_value_home")
                 state.fair_value_away = game_odds.get("fair_value_away")
                 state.current_spread = game_odds.get("current_spread")
                 state.odds_last_updated = game_odds.get("timestamp")
                 state.last_odds_update = datetime.utcnow()
 
+                # If ESPN didn't provide a spread (game already live at startup),
+                # use BetStack/Odds spread as fallback for opening_spread
+                if state.opening_spread == 0 and state.current_spread is not None:
+                    spread_val = abs(state.current_spread)
+                    if spread_val > 0:
+                        state.opening_spread = spread_val
+                        # Fix favorite/underdog based on the spread
+                        if state.current_spread < 0:
+                            # Negative = home favored
+                            state.favorite = state.home_team
+                            state.underdog = state.away_team
+                        else:
+                            state.favorite = state.away_team
+                            state.underdog = state.home_team
+                        # Re-match Kalshi if favorite changed
+                        self._match_kalshi_market(state)
+                        logger.info(
+                            f"Backfilled spread for {state.home_team} vs {state.away_team}: "
+                            f"spread={spread_val}, favorite={state.favorite}"
+                        )
+
                 self._calculate_derived_signals(state)
+            else:
+                logger.debug(
+                    f"No odds match for {state.home_team} vs {state.away_team}"
+                )
+
+        logger.info(f"Odds update: matched {matched_count}/{len(self.games)} games")
 
     def update_kalshi_prices(self):
         """
         Fetch latest Kalshi prices for all matched markets.
         Call this every 10-15 seconds.
-        Fetches orderbook only every 2nd update to reduce API calls and avoid rate limits.
+        Fetches orderbook every other update to reduce API calls.
         """
+        # Start at -1 so first update (count=0) fetches orderbook
         self._kalshi_update_count += 1
         fetch_orderbook = (self._kalshi_update_count % 2) == 0
+
+        matched_count = 0
+        updated_count = 0
 
         for game_id, state in self.games.items():
             if not state.kalshi_market_ticker:
                 continue
+            matched_count += 1
 
             ticker = state.kalshi_market_ticker
             prices = self.kalshi.get_market_prices(ticker)
 
             if prices:
-                state.kalshi_yes_bid = prices.get("yes_bid")
-                state.kalshi_yes_ask = prices.get("yes_ask")
-                state.kalshi_last_price = prices.get("last_price")
+                bid = prices.get("yes_bid")
+                ask = prices.get("yes_ask")
+                last = prices.get("last_price")
+                status = prices.get("status", "")
+
+                state.kalshi_yes_bid = bid
+                state.kalshi_yes_ask = ask
+                state.kalshi_last_price = last
                 state.kalshi_volume = prices.get("volume", 0)
                 state.kalshi_open_interest = prices.get("open_interest", 0)
-                state.kalshi_market_status = prices.get("status", "")
+                state.kalshi_market_status = status
                 state.last_kalshi_update = datetime.utcnow()
+                updated_count += 1
 
                 # Bid-ask spread
-                if state.kalshi_yes_bid and state.kalshi_yes_ask:
-                    state.kalshi_bid_ask_spread = state.kalshi_yes_ask - state.kalshi_yes_bid
+                if bid and ask:
+                    state.kalshi_bid_ask_spread = ask - bid
 
                 # Opening and tipoff prices
                 if ticker in self._opening_prices:
@@ -231,13 +263,26 @@ class DataAggregator:
                 if ticker in self._tipoff_prices:
                     state.kalshi_tipoff_price = self._tipoff_prices[ticker]
 
-                # Order book depth (every 2nd update to cut Kalshi API calls in half)
+                # Order book depth
                 if fetch_orderbook:
                     depth = self.kalshi.get_orderbook_depth_at_ask(ticker)
                     state.kalshi_book_depth = depth
 
                 # Recalculate derived signals
                 self._calculate_derived_signals(state)
+
+                logger.debug(
+                    f"Kalshi {ticker}: bid={bid} ask={ask} last={last} "
+                    f"status={status} depth={state.kalshi_book_depth}"
+                )
+            else:
+                logger.warning(f"Kalshi price fetch returned None for {ticker}")
+
+        if matched_count > 0:
+            logger.info(
+                f"Kalshi prices: {updated_count}/{matched_count} markets updated"
+                + (" (+ orderbook)" if fetch_orderbook else "")
+            )
 
     # ─────────────────────────────────────────
     # Kalshi Market Matching
@@ -256,30 +301,49 @@ class DataAggregator:
         away_abbrev = get_abbreviation(state.away_team)
         fav_abbrev = get_abbreviation(state.favorite) if state.favorite else home_abbrev
 
+        # Kalshi ticker format: KXNBAGAME-26MAR14WASBOS-BOS
+        # The middle segment contains both team codes concatenated (e.g., WASBOS)
+        # The suffix after the last dash is the team "yes" represents
+
         for ticker, market_data in self.kalshi_market_map.items():
-            # Ticker format: KXNBAGAME-26FEB20BKNOKC-OKC
-            # The suffix after the last dash is the team "yes" represents
-            if not (home_abbrev in ticker and away_abbrev in ticker):
+            # Extract the team-code segment from the ticker
+            # e.g., "KXNBAGAME-26MAR14WASBOS-BOS" → middle part contains "WASBOS"
+            parts = ticker.split("-")
+            if len(parts) < 3:
+                continue
+
+            # The team codes are embedded in the date+teams segment (e.g., "26MAR14WASBOS")
+            date_teams = parts[1]  # e.g., "26MAR14WASBOS"
+            ticker_suffix = parts[-1]  # e.g., "BOS"
+
+            # Check if both team abbreviations appear in the date+teams segment
+            if home_abbrev not in date_teams or away_abbrev not in date_teams:
                 continue
 
             # Pick the market where "yes" = favorite
-            if ticker.endswith(f"-{fav_abbrev}"):
+            if ticker_suffix == fav_abbrev:
                 state.kalshi_market_ticker = ticker
                 state.kalshi_event_ticker = market_data.get("event_ticker")
                 state.kalshi_yes_team = state.favorite
                 # Use bid/ask from discover data so dashboard shows prices immediately
-                state.kalshi_yes_bid = market_data.get("yes_bid")
-                state.kalshi_yes_ask = market_data.get("yes_ask")
-                state.kalshi_last_price = market_data.get("last_price")
+                bid = market_data.get("yes_bid")
+                ask = market_data.get("yes_ask")
+                last = market_data.get("last_price")
+                state.kalshi_yes_bid = bid
+                state.kalshi_yes_ask = ask
+                state.kalshi_last_price = last
                 state.last_kalshi_update = datetime.utcnow()
                 self._calculate_derived_signals(state)
                 logger.info(
-                    f"Matched {state.home_team} vs {state.away_team} → {ticker} (yes={fav_abbrev})"
+                    f"Matched {state.home_team} vs {state.away_team} → {ticker} "
+                    f"(yes={fav_abbrev}, bid={bid}, ask={ask}, last={last})"
                 )
                 return
 
-        logger.debug(
-            f"No Kalshi market found for {state.home_team} ({home_abbrev}) vs {state.away_team} ({away_abbrev})"
+        logger.warning(
+            f"No Kalshi market found for {state.home_team} ({home_abbrev}) vs "
+            f"{state.away_team} ({away_abbrev}) [fav={fav_abbrev}] — "
+            f"searched {len(self.kalshi_market_map)} markets"
         )
 
     def _record_tipoff_prices(self, state: LiveGameState):

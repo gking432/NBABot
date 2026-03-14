@@ -411,8 +411,7 @@ class TradingBot:
 
     def _game_to_dict(self, state: LiveGameState) -> dict:
         """Convert LiveGameState to dict for API/dashboard."""
-        # Prefer current spread (BetStack) when available, else opening spread (ESPN)
-        spread = state.current_spread if state.current_spread is not None else state.opening_spread
+        # Always show opening_spread (the pre-game line) — this is what strategies use
         return {
             "game_id": state.game_id_espn,
             "home_team": state.home_team,
@@ -422,10 +421,13 @@ class TradingBot:
             "quarter": state.quarter,
             "time_remaining": state.time_remaining_seconds,
             "status": state.game_status.value,
-            "spread": spread,
+            "spread": state.opening_spread,
             "favorite": state.favorite,
+            "kalshi_ticker": state.kalshi_market_ticker,
             "kalshi_bid": state.kalshi_yes_bid,
             "kalshi_ask": state.kalshi_yes_ask,
+            "kalshi_last": state.kalshi_last_price,
+            "kalshi_status": state.kalshi_market_status,
             "kalshi_tipoff_price": state.kalshi_tipoff_price,
             "price_drop_pct": round(state.price_drop_from_tipoff * 100, 1),
             "fair_value": round(state.fair_value_home * 100, 1) if state.fair_value_home else None,
