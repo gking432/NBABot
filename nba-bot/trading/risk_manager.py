@@ -15,6 +15,7 @@ from core.config import (
     TIER_CLASSIC_MAX_CONCURRENT_POSITIONS, HF_MAX_CONCURRENT_POSITIONS,
     PULSE_MAX_CONCURRENT_POSITIONS,
     INITIAL_BANKROLL_CENTS,
+    PAPER_TRADING,
 )
 
 logger = logging.getLogger(__name__)
@@ -81,8 +82,8 @@ class RiskManager:
         if self.global_pause:
             return False, "Global pause active — bankroll below hard floor"
 
-        # Strategy-wide pause (weekly loss limit)
-        if self.strategy_paused.get(strategy, False):
+        # Strategy-wide pause (weekly loss limit) is disabled in paper trading
+        if not PAPER_TRADING and self.strategy_paused.get(strategy, False):
             return False, f"{strategy.value} paused due to weekly loss limit"
 
         # Per-game pause (daily loss limit hit on this game)
@@ -148,21 +149,22 @@ class RiskManager:
                     f"(limit {DAILY_LOSS_LIMIT_PCT:.0%}). Per-game pauses active."
                 )
 
-        # Weekly loss limits → strategy-wide pause
-        for strategy in Strategy:
-            weekly_start = self._weekly_start.get(strategy, 0)
-            if weekly_start <= 0:
-                continue
-            current = self.pm.bankrolls.get(strategy, 0)
-            weekly_loss_pct = (weekly_start - current) / weekly_start
+        # Weekly loss limits → strategy-wide pause (disabled in paper trading)
+        if not PAPER_TRADING:
+            for strategy in Strategy:
+                weekly_start = self._weekly_start.get(strategy, 0)
+                if weekly_start <= 0:
+                    continue
+                current = self.pm.bankrolls.get(strategy, 0)
+                weekly_loss_pct = (weekly_start - current) / weekly_start
 
-            if weekly_loss_pct >= WEEKLY_LOSS_LIMIT_PCT:
-                if not self.strategy_paused.get(strategy):
-                    self.strategy_paused[strategy] = True
-                    logger.warning(
-                        f"KILL SWITCH: {strategy.value} paused — weekly loss "
-                        f"{weekly_loss_pct:.1%} exceeds {WEEKLY_LOSS_LIMIT_PCT:.0%} limit"
-                    )
+                if weekly_loss_pct >= WEEKLY_LOSS_LIMIT_PCT:
+                    if not self.strategy_paused.get(strategy):
+                        self.strategy_paused[strategy] = True
+                        logger.warning(
+                            f"KILL SWITCH: {strategy.value} paused — weekly loss "
+                            f"{weekly_loss_pct:.1%} exceeds {WEEKLY_LOSS_LIMIT_PCT:.0%} limit"
+                        )
 
         # Global hard floor
         total = sum(self.pm.bankrolls.values())
