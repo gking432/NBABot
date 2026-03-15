@@ -93,7 +93,7 @@ def render_dashboard() -> str:
             margin-bottom: 16px; box-shadow: 0 12px 30px rgba(18,24,38,0.08);
         }
         .card-header { font-weight: 700; margin-bottom: 12px; font-size: 14px; letter-spacing: 0.2px; }
-        .strategy-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .strategy-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
         .strategy-card { padding: 16px; border-radius: 12px; border: 1px solid var(--border); background: #fbfcfe; }
         .strategy-card.conservative .card-header { color: var(--conservative); }
         .strategy-card.tiered .card-header { color: var(--tiered); }
@@ -173,7 +173,7 @@ def render_dashboard() -> str:
 
             .tab-content { padding: 8px; min-height: auto; }
 
-            .strategy-cards { grid-template-columns: 1fr 1fr !important; gap: 8px; }
+            .strategy-cards { grid-template-columns: repeat(4, 1fr) !important; gap: 8px; }
             .strategy-card { padding: 10px; font-size: 12px; }
             .strategy-card .card-header { font-size: 12px; margin-bottom: 6px; }
 
@@ -217,7 +217,7 @@ def render_dashboard() -> str:
         }
 
         @media (max-width: 480px) {
-            .strategy-cards { grid-template-columns: 1fr !important; }
+            .strategy-cards { grid-template-columns: repeat(2, 1fr) !important; }
             .tab-btn { padding: 5px 6px; font-size: 10px; }
         }
     </style>
@@ -555,7 +555,41 @@ def render_dashboard() -> str:
             }
             html += '</div>';
 
-            // ─── OPEN POSITIONS CARD ───
+            // ─── COMPARISON CARD (swapped from right column) ───
+            html += '<div class="card"><div class="card-header">Comparison</div><table><thead><tr><th></th>';
+            STRATEGIES.forEach(st => { html += '<th>' + (STRATEGY_LABELS[st] || st) + '</th>'; });
+            html += '</tr></thead><tbody>';
+            const rows = ['win_rate','avg_win','avg_loss','best_trade','worst_trade','total_pnl'];
+            const labels = ['Win Rate','Avg Win','Avg Loss','Best','Worst','Total P&L'];
+            rows.forEach((r, i) => {
+                html += `<tr><td>${labels[i]}</td>`;
+                STRATEGIES.forEach(st => {
+                    const v = (stats[st] || {})[r];
+                    const disp = r === 'win_rate' ? fmtPct(v) : fmt(v);
+                    const cls = (r === 'total_pnl' || r === 'avg_win' || r === 'best_trade') && v > 0 ? 'positive' : (v < 0 ? 'negative' : '');
+                    html += `<td class="${cls}">${disp}</td>`;
+                });
+                html += '</tr>';
+            });
+            html += '</tbody></table></div>';
+
+            // ─── ALL ACTIVITY CARD (swapped from right column) ───
+            html += '<div class="card"><div class="card-header">All Activity (Latest 200)</div><div class="activity-feed">';
+            const combined = [
+                ...trades.map(t => ({ ...t, type: 'trade', sort: new Date(t.timestamp).getTime() })),
+                ...signals.filter(sg => sg.action_taken).map(sg => ({ ...sg, type: 'signal', sort: new Date(sg.timestamp).getTime() }))
+            ].filter(x => !Number.isNaN(x.sort)).sort((a, b) => b.sort - a.sort).slice(0, 200);
+            if (combined.length === 0) html += '<div class="empty-state">No activity yet</div>';
+            else combined.forEach(x => {
+                const pnl = x.pnl_cents;
+                const cls = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
+                html += `<div class="activity-item ${cls}">${fmtTs(x.timestamp)} | ${x.strategy || ''} | ${x.team || ''} | ${x.action || 'SIGNAL'} | ${fmt(x.price_cents || x.kalshi_price)} | ${pnl != null ? fmt(pnl) : ''}</div>`;
+            });
+            html += '</div></div>';
+
+            html += '</div><div>';
+
+            // ─── OPEN POSITIONS CARD (swapped from left column) ───
             const activePositions = s.active_positions || [];
             const liveGames = s.live_games || [];
             const gamesByIdOP = {};
@@ -635,38 +669,9 @@ def render_dashboard() -> str:
             }
             html += '</div>';
 
+            // ─── COMBINED P&L CHART (swapped from left column) ───
             html += '<div class="card"><div class="card-header">Combined P&L Chart</div><div class="chart-container"><canvas id="chartOverview"></canvas></div></div>';
-            html += '</div><div>';
-
-            html += '<div class="card"><div class="card-header">All Activity (Latest 200)</div><div class="activity-feed">';
-            const combined = [
-                ...trades.map(t => ({ ...t, type: 'trade', sort: new Date(t.timestamp).getTime() })),
-                ...signals.filter(sg => sg.action_taken).map(sg => ({ ...sg, type: 'signal', sort: new Date(sg.timestamp).getTime() }))
-            ].filter(x => !Number.isNaN(x.sort)).sort((a, b) => b.sort - a.sort).slice(0, 200);
-            if (combined.length === 0) html += '<div class="empty-state">No activity yet</div>';
-            else combined.forEach(x => {
-                const pnl = x.pnl_cents;
-                const cls = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
-                html += `<div class="activity-item ${cls}">${fmtTs(x.timestamp)} | ${x.strategy || ''} | ${x.team || ''} | ${x.action || 'SIGNAL'} | ${fmt(x.price_cents || x.kalshi_price)} | ${pnl != null ? fmt(pnl) : ''}</div>`;
-            });
             html += '</div></div>';
-
-            html += '<div class="card"><div class="card-header">Comparison</div><table><thead><tr><th></th>';
-            STRATEGIES.forEach(st => { html += '<th>' + (STRATEGY_LABELS[st] || st) + '</th>'; });
-            html += '</tr></thead><tbody>';
-            const rows = ['win_rate','avg_win','avg_loss','best_trade','worst_trade','total_pnl'];
-            const labels = ['Win Rate','Avg Win','Avg Loss','Best','Worst','Total P&L'];
-            rows.forEach((r, i) => {
-                html += `<tr><td>${labels[i]}</td>`;
-                STRATEGIES.forEach(st => {
-                    const v = (stats[st] || {})[r];
-                    const disp = r === 'win_rate' ? fmtPct(v) : fmt(v);
-                    const cls = (r === 'total_pnl' || r === 'avg_win' || r === 'best_trade') && v > 0 ? 'positive' : (v < 0 ? 'negative' : '');
-                    html += `<td class="${cls}">${disp}</td>`;
-                });
-                html += '</tr>';
-            });
-            html += '</tbody></table></div></div></div>';
 
             document.getElementById('tabOverview').innerHTML = html;
             renderOverviewChart(performance || [], trades || []);
