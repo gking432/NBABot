@@ -297,6 +297,7 @@ def render_dashboard() -> str:
         };
         let chartInstances = {};
         let refreshTimer = 10;
+        let lastDataSignature = null;
 
         function fmt(cents) { return cents != null ? '$' + (cents / 100).toFixed(2) : '—'; }
         function fmtGameTime(t) {
@@ -316,6 +317,40 @@ def render_dashboard() -> str:
         }
         function fmtPct(val) { return val != null ? (val * 100).toFixed(1) + '%' : '—'; }
         function fmtTs(ts) { return ts ? new Date(ts).toLocaleString() : '—'; }
+        function latestTs(arr) {
+            if (!arr || arr.length === 0) return '';
+            const ts = arr[0].timestamp || arr[0].date;
+            if (!ts) return '';
+            return ts;
+        }
+        function computeStatsSignature(stats) {
+            return STRATEGIES.map(s => {
+                const st = stats[s] || {};
+                return [
+                    st.total_trades ?? 0,
+                    st.total_pnl ?? 0,
+                    st.win_rate ?? 0
+                ].join(':');
+            }).join('|');
+        }
+        function captureScrollState() {
+            const activity = document.querySelector('#tabOverview .activity-feed');
+            return {
+                windowScroll: window.scrollY,
+                activeTabId: document.querySelector('.tab-content.active')?.id || '',
+                activityScroll: activity ? activity.scrollTop : null,
+            };
+        }
+        function restoreScrollState(state) {
+            if (!state) return;
+            if (typeof state.windowScroll === 'number') {
+                window.scrollTo(0, state.windowScroll);
+            }
+            const activity = document.querySelector('#tabOverview .activity-feed');
+            if (activity && state.activityScroll != null) {
+                activity.scrollTop = state.activityScroll;
+            }
+        }
 
         function toggleGamesPanel() {
             const panel = document.getElementById('liveGamesPanel');
@@ -376,18 +411,34 @@ def render_dashboard() -> str:
                 } else {
                     document.getElementById('statusText').textContent = 'API error (see console)';
                 }
-                const s = status || {};
-                updateTabOverview(s, trades || [], signals || [], performance || [], stats);
-                updateTabConservative(trades || [], positions || [], stats.CONSERVATIVE || {});
-                updateTabTiered(trades || [], positions || [], stats.TIERED || {});
-                updateTabTieredClassic(trades || [], positions || [], stats.TIERED_CLASSIC || {});
-                updateTabHeavy(trades || [], positions || [], stats.HEAVY_FAVORITE || {});
-                updateTabConservativeHold(trades || [], positions || [], stats.CONSERVATIVE_HOLD || {});
-                updateTabTieredHold(trades || [], positions || [], stats.TIERED_HOLD || {});
-                updateTabTieredClassicHold(trades || [], positions || [], stats.TIERED_CLASSIC_HOLD || {});
-                updateTabPulse(trades || [], positions || [], stats.PULSE || {});
-                updateTabComparison(trades || [], stats);
-                updateTabSignals(signals || []);
+                const signature = [
+                    (trades || []).length,
+                    latestTs(trades || []),
+                    (signals || []).length,
+                    latestTs(signals || []),
+                    (positions || []).length,
+                    (performance || []).length,
+                    latestTs(performance || []),
+                    computeStatsSignature(stats)
+                ].join('|');
+
+                if (signature !== lastDataSignature) {
+                    const scrollState = captureScrollState();
+                    const s = status || {};
+                    updateTabOverview(s, trades || [], signals || [], performance || [], stats);
+                    updateTabConservative(trades || [], positions || [], stats.CONSERVATIVE || {});
+                    updateTabTiered(trades || [], positions || [], stats.TIERED || {});
+                    updateTabTieredClassic(trades || [], positions || [], stats.TIERED_CLASSIC || {});
+                    updateTabHeavy(trades || [], positions || [], stats.HEAVY_FAVORITE || {});
+                    updateTabConservativeHold(trades || [], positions || [], stats.CONSERVATIVE_HOLD || {});
+                    updateTabTieredHold(trades || [], positions || [], stats.TIERED_HOLD || {});
+                    updateTabTieredClassicHold(trades || [], positions || [], stats.TIERED_CLASSIC_HOLD || {});
+                    updateTabPulse(trades || [], positions || [], stats.PULSE || {});
+                    updateTabComparison(trades || [], stats);
+                    updateTabSignals(signals || []);
+                    lastDataSignature = signature;
+                    requestAnimationFrame(() => restoreScrollState(scrollState));
+                }
 
                 refreshTimer = 10;
             } catch (err) {
