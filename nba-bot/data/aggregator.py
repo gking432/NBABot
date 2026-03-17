@@ -120,6 +120,7 @@ class DataAggregator:
                 state.favorite = espn_game["favorite"]
                 state.underdog = espn_game["underdog"]
                 state.opening_spread = espn_game["opening_spread"]
+                state.start_time = espn_game.get("start_time")
                 self.games[game_id] = state
 
                 # Try to match with a Kalshi market
@@ -136,6 +137,10 @@ class DataAggregator:
             state.time_remaining_seconds = espn_game["time_remaining_seconds"]
             state.game_status = espn_game["game_status"]
             state.last_score_update = datetime.utcnow()
+            # Preserve favorite during live — only backfill if missing
+            if not state.favorite and espn_game.get("favorite"):
+                state.favorite = espn_game["favorite"]
+                state.underdog = espn_game.get("underdog", "")
 
             # Track tipoff price: when game transitions from PRE to LIVE
             if was_pre and state.game_status == GameStatus.LIVE:

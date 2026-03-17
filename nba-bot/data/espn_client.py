@@ -142,6 +142,9 @@ class ESPNClient:
                         favorite = away_team
                         underdog = home_team
 
+            # Start time (ISO 8601, e.g. "2026-03-15T23:30Z") — for PRE games
+            start_time = event.get("date") or event.get("startDate", "")
+
             return {
                 "game_id_espn": game_id,
                 "home_team": home_team,
@@ -154,6 +157,7 @@ class ESPNClient:
                 "opening_spread": abs(opening_spread),  # Store as positive
                 "favorite": favorite,
                 "underdog": underdog,
+                "start_time": start_time,
             }
 
         except (KeyError, IndexError, ValueError) as e:

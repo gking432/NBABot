@@ -316,7 +316,45 @@ def render_dashboard() -> str:
             return (h ?? 0) + '-' + (a ?? 0);
         }
         function fmtPct(val) { return val != null ? (val * 100).toFixed(1) + '%' : '—'; }
-        function fmtTs(ts) { return ts ? new Date(ts).toLocaleString() : '—'; }
+        function getDateLocal(ts) {
+            if (!ts) return '';
+            let s = String(ts).trim().replace(' ', 'T');
+            if (!s.endsWith('Z') && !/[+-]\\d{2}:\\d{2}$/.test(s)) s += 'Z';
+            const d = new Date(s);
+            return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+        }
+        function todayChicago() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }); }
+        function yesterdayChicago() { const d = new Date(); d.setDate(d.getDate() - 1); return d.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }); }
+        function filterActivityFeed() {
+            const sel = document.getElementById('activityDateFilter');
+            const feed = document.getElementById('activityFeed');
+            if (!sel || !feed || !window._activityData) return;
+            const val = sel.value;
+            const today = todayChicago();
+            const yesterday = yesterdayChicago();
+            const filtered = window._activityData.filter(x => {
+                if (val === 'all') return true;
+                const d = getDateLocal(x.timestamp);
+                if (val === 'today') return d === today;
+                if (val === 'yesterday') return d === yesterday;
+                return true;
+            }).slice(0, 200);
+            feed.innerHTML = filtered.length === 0 ? '<div class="empty-state">No activity for this date</div>' :
+                filtered.map(x => {
+                    const pnl = x.pnl_cents;
+                    const cls = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
+                    return '<div class="activity-item ' + cls + '">' + fmtTs(x.timestamp) + ' | ' + (x.strategy || '') + ' | ' + (x.team || '') + ' | ' + (x.action || 'SIGNAL') + ' | ' + fmt(x.price_cents || x.kalshi_price) + ' | ' + (pnl != null ? fmt(pnl) : '') + '</div>';
+                }).join('');
+        }
+        function fmtTs(ts) {
+            if (!ts) return '—';
+            let s = String(ts).trim().replace(' ', 'T');
+            if (!s) return '—';
+            if (!s.endsWith('Z') && !/[+-]\\d{2}:\\d{2}$/.test(s)) s += 'Z';
+            const d = new Date(s);
+            if (isNaN(d.getTime())) return '—';
+            return d.toLocaleString('en-US', { timeZone: 'America/Chicago' });
+        }
         function latestTs(arr) {
             if (!arr || arr.length === 0) return '';
             const ts = arr[0].timestamp || arr[0].date;
@@ -499,10 +537,14 @@ def render_dashboard() -> str:
                 const priceDisplay = g.kalshi_bid != null || g.kalshi_ask != null
                     ? `Bid: ${g.kalshi_bid ?? '—'}¢ / Ask: ${g.kalshi_ask ?? '—'}¢`
                     : (g.kalshi_last != null ? `Last: ${g.kalshi_last}¢` : (g.kalshi_ticker ? 'Matched (no quotes)' : 'No Kalshi market'));
+                const isPre = (g.status || '').toLowerCase() === 'pre';
+                const timeDisplay = isPre && g.start_time
+                    ? (() => { const d = new Date(g.start_time); return isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' }); })()
+                    : `Q${g.quarter || '?'} ${Math.floor((g.time_remaining || 0) / 60)}:${String((g.time_remaining || 0) % 60).padStart(2,'0')}`;
                 return `
                     <div class="game-card ${borderClass}">
                         <div class="game-score">${g.away_team || 'Away'} ${g.away_score || 0} @ ${g.home_team || 'Home'} ${g.home_score || 0}</div>
-                        <div class="game-meta">Q${g.quarter || '?'} ${Math.floor((g.time_remaining || 0) / 60)}:${String((g.time_remaining || 0) % 60).padStart(2,'0')} | Spread: ${g.spread || '—'} | ${g.favorite || '—'}</div>
+                        <div class="game-meta">${timeDisplay} | Spread: ${g.spread || '—'} | Fav: ${g.favorite || '—'}</div>
                         <div class="game-stats">
                             <span>${priceDisplay}</span>
                             <span class="${(g.price_drop_pct || 0) < 0 ? 'negative' : ''}">Drop: ${g.price_drop_pct ?? '—'}%</span>
@@ -606,32 +648,37 @@ def render_dashboard() -> str:
             }
             html += '</div>';
 
-            // ─── COMPARISON CARD (swapped from right column) ───
+            // ─── COMPARISON CARD (strategies as rows, Win Rate & P&L last) ───
+            const cols = ['total_trades','avg_win','avg_loss','best_trade','worst_trade','win_rate','total_pnl'];
+            const colLabels = ['Trades','Avg Win','Avg Loss','Best','Worst','Win Rate','Total P&L'];
             html += '<div class="card"><div class="card-header">Comparison</div><table><thead><tr><th></th>';
-            STRATEGIES.forEach(st => { html += '<th>' + (STRATEGY_LABELS[st] || st) + '</th>'; });
+            colLabels.forEach(l => { html += '<th>' + l + '</th>'; });
             html += '</tr></thead><tbody>';
-            const rows = ['win_rate','avg_win','avg_loss','best_trade','worst_trade','total_pnl'];
-            const labels = ['Win Rate','Avg Win','Avg Loss','Best','Worst','Total P&L'];
-            rows.forEach((r, i) => {
-                html += `<tr><td>${labels[i]}</td>`;
-                STRATEGIES.forEach(st => {
-                    const v = (stats[st] || {})[r];
-                    const disp = r === 'win_rate' ? fmtPct(v) : fmt(v);
-                    const cls = (r === 'total_pnl' || r === 'avg_win' || r === 'best_trade') && v > 0 ? 'positive' : (v < 0 ? 'negative' : '');
-                    html += `<td class="${cls}">${disp}</td>`;
+            STRATEGIES.forEach(st => {
+                html += '<tr><td>' + (STRATEGY_LABELS[st] || st) + '</td>';
+                cols.forEach((c, i) => {
+                    const v = (stats[st] || {})[c];
+                    const disp = c === 'win_rate' ? fmtPct(v) : (c === 'total_trades' ? (v ?? 0) : fmt(v));
+                    const cls = (c === 'total_pnl' || c === 'avg_win' || c === 'best_trade') && v > 0 ? 'positive' : (v < 0 ? 'negative' : '');
+                    html += '<td class="' + cls + '">' + disp + '</td>';
                 });
                 html += '</tr>';
             });
             html += '</tbody></table></div>';
 
             // ─── ALL ACTIVITY CARD (swapped from right column) ───
-            html += '<div class="card"><div class="card-header">All Activity (Latest 200)</div><div class="activity-feed">';
             const combined = [
-                ...trades.map(t => ({ ...t, type: 'trade', sort: new Date(t.timestamp).getTime() })),
-                ...signals.filter(sg => sg.action_taken).map(sg => ({ ...sg, type: 'signal', sort: new Date(sg.timestamp).getTime() }))
-            ].filter(x => !Number.isNaN(x.sort)).sort((a, b) => b.sort - a.sort).slice(0, 200);
-            if (combined.length === 0) html += '<div class="empty-state">No activity yet</div>';
-            else combined.forEach(x => {
+                ...trades.map(t => ({ ...t, type: 'trade', sort: new Date((t.timestamp || '').replace(' ','T') + (String(t.timestamp||'').endsWith('Z') ? '' : 'Z')).getTime() })),
+                ...signals.filter(sg => sg.action_taken).map(sg => ({ ...sg, type: 'signal', sort: new Date((sg.timestamp || '').replace(' ','T') + (String(sg.timestamp||'').endsWith('Z') ? '' : 'Z')).getTime() }))
+            ].filter(x => !Number.isNaN(x.sort)).sort((a, b) => b.sort - a.sort);
+            window._activityData = combined;
+            html += '<div class="card"><div class="card-header">All Activity (Latest 200)</div>';
+            html += '<div class="filter-bar" style="margin-bottom:8px"><select id="activityDateFilter" onchange="filterActivityFeed()">';
+            html += '<option value="all">All</option><option value="today">Today</option><option value="yesterday">Yesterday</option>';
+            html += '</select></div><div class="activity-feed" id="activityFeed">';
+            const filtered = combined.slice(0, 200);
+            if (filtered.length === 0) html += '<div class="empty-state">No activity yet</div>';
+            else filtered.forEach(x => {
                 const pnl = x.pnl_cents;
                 const cls = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
                 html += `<div class="activity-item ${cls}">${fmtTs(x.timestamp)} | ${x.strategy || ''} | ${x.team || ''} | ${x.action || 'SIGNAL'} | ${fmt(x.price_cents || x.kalshi_price)} | ${pnl != null ? fmt(pnl) : ''}</div>`;

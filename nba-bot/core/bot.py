@@ -421,6 +421,7 @@ class TradingBot:
             "quarter": state.quarter,
             "time_remaining": state.time_remaining_seconds,
             "status": state.game_status.value,
+            "start_time": state.start_time,
             "spread": state.opening_spread,
             "favorite": state.favorite,
             "kalshi_ticker": state.kalshi_market_ticker,

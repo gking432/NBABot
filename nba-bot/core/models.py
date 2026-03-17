@@ -90,6 +90,9 @@ class LiveGameState:
     time_remaining_seconds: int = 720        # seconds left in current quarter
     game_status: GameStatus = GameStatus.PRE
 
+    # Pre-game
+    start_time: Optional[str] = None         # ISO 8601 (e.g. "2026-03-15T23:30Z") — for PRE games
+
     # Spreads & Odds
     opening_spread: float = 0.0              # ESPN pre-game (e.g., -5.5 = home favored by 5.5)
     current_spread: Optional[float] = None   # Live from The Odds API
