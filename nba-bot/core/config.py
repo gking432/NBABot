@@ -192,35 +192,44 @@ TIER_CLASSIC_MAX_POSITION_LOSS_PCT = 0.55
 TIER_CLASSIC_MAX_CONCURRENT_POSITIONS = 3
 
 # ─────────────────────────────────────────────
-# Strategy 3: GARBAGE TIME FAVORITE LOCK
-# Buy the favorite's contract during blowouts when
-# Kalshi price hasn't caught up to reality.
+# Strategy 3: BOUNCEBACK (Q3 Halftime-Dip Specialist)
+# Buy the favorite's contract at the start of Q3 when
+# they're trailing by a moderate margin. Exploits halftime
+# pessimism selling and Q3 comeback patterns.
 # ─────────────────────────────────────────────
 
-GT_MIN_ENTRY_QUARTER = 3            # Only enter in Q3 or Q4
-GT_Q3_MAX_TIME_REMAINING_SEC = 240  # Q3: enter only when ≤4:00 left
-GT_Q4_MIN_TIME_REMAINING_SEC = 360  # Q4: enter only when ≥6:00 left
-GT_MIN_LEAD_POINTS = 20             # Favorite must be ahead by ≥20
-GT_MIN_LEAD_HEAVY_FAV = 15          # ...or ≥15 if pre-game spread was 10+
-GT_HEAVY_FAV_SPREAD_THRESHOLD = 10  # Spread threshold for reduced lead requirement
-GT_MIN_FAVORITE_PRICE_CENTS = 80    # Kalshi yes_ask must be ≥80¢ (confirms blowout)
-GT_MAX_FAVORITE_PRICE_CENTS = 93    # Don't buy above 93¢ (need profit room)
-GT_MIN_BOOK_DEPTH = 20              # Minimum book depth
-GT_LEAD_STABILITY_SEC = 180         # Lead must not have shrunk in last 3 min (checked via momentum)
-GT_MOMENTUM_FLOOR = -0.2            # Momentum must be > -0.2 (not actively collapsing)
+# Entry conditions
+GT_MIN_SPREAD = 5                   # Pre-game spread at least 5 (strong favorite)
+GT_ENTRY_WINDOW_Q3_SEC = 360        # First 6 min of Q3 (time_remaining >= 360)
+GT_MIN_TRAILING_POINTS = 6          # Favorite must be losing by at least 6
+GT_MAX_TRAILING_POINTS = 18         # But not more than 18 (blowout = low comeback rate)
+GT_MIN_DEFICIT_VS_SPREAD = 8        # Deficit vs spread must be >= 8
+GT_MIN_PRICE_CENTS = 15             # Kalshi yes_ask must be >= 15¢
+GT_MAX_PRICE_CENTS = 42             # Don't buy above 42¢ (need asymmetric payoff)
+GT_MIN_PRICE_DROP_PCT = 0.15        # Price must have dropped 15%+ from tipoff
+GT_MIN_BOOK_DEPTH = 25              # Minimum contracts on the book
+GT_MIN_EDGE_PCT = 0.06              # 6% edge vs fair value (if available)
 
-# Garbage time sizing
-GT_BUDGET_PCT = 0.15                # 15% of bankroll per position
+# Sizing
+GT_BUDGET_PCT = 0.14                # 14% of bankroll per game
+GT_ENTRY1_BUDGET_SPLIT = 0.70       # 70% of game budget for Entry 1, 30% for Entry 2
 
-# Garbage time exits
-GT_TAKE_PROFIT_CENTS = 97           # Sell when favorite hits 97¢
-GT_STOP_LOSS_LEAD_POINTS = 12       # If lead shrinks to ≤12, sell immediately
-GT_TIME_EXIT_Q4_REMAINING_SEC = 120 # With ≤2:00 left in Q4, sell if ≥95¢
-GT_TIME_EXIT_PRICE_FLOOR_CENTS = 95
-GT_STOP_LOSS_PRICE_PCT = 0.08       # Hard stop: -8% from entry price
+# Entry 2 (averaging down)
+GT_ENTRY2_MIN_DROP_PCT = 0.20       # Price must drop 20% from Entry 1
+GT_ENTRY2_MIN_TIME_Q3_SEC = 180     # Must have >= 3 min left in Q3
+GT_ENTRY2_MAX_DEFICIT = 25          # Deficit can't have grown past 25
 
-# Garbage time limits
-GT_MAX_CONCURRENT_POSITIONS = 2
+# Exits
+GT_TP1_PCT = 0.30                   # Take profit 1: +30% → sell 50%
+GT_TP1_SELL_PCT = 0.50              # Sell 50% of shares
+GT_TP2_PRICE_CENTS = 50             # Take profit 2: price >= 50¢ → sell remaining
+GT_STOP_LOSS_PCT = 0.35             # Stop loss at -35% (after hold period)
+GT_STOP_MIN_HOLD_SEC = 360          # Must hold 6 min before stop fires
+GT_THESIS_INVALID_DEFICIT = 30      # Deficit > 30 = thesis dead, sell all
+GT_TIME_EXIT_Q4_SEC = 300           # Q4 with < 5 min left → sell at market
+
+# Limits
+GT_MAX_CONCURRENT_POSITIONS = 3
 
 # ─────────────────────────────────────────────
 # Strategy 4: PULSE (Aggressive Momentum Scalp)

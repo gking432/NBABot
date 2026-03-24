@@ -246,7 +246,7 @@ def render_dashboard() -> str:
         <button class="tab-btn" data-tab="conservative">Conservative</button>
         <button class="tab-btn" data-tab="tiered">Tiered V2</button>
         <button class="tab-btn" data-tab="tieredClassic">Tiered Classic</button>
-        <button class="tab-btn" data-tab="heavy">Garbage Time</button>
+        <button class="tab-btn" data-tab="heavy">Bounceback</button>
         <button class="tab-btn" data-tab="conservativeHold">Conservative Hold</button>
         <button class="tab-btn" data-tab="tieredHold">Tiered Hold</button>
         <button class="tab-btn" data-tab="tieredClassicHold">Tiered Classic Hold</button>
@@ -289,7 +289,7 @@ def render_dashboard() -> str:
             CONSERVATIVE: 'Conservative',
             TIERED: 'Tiered V2',
             TIERED_CLASSIC: 'Tiered Classic',
-            GARBAGE_TIME: 'Garbage Time',
+            GARBAGE_TIME: 'Bounceback',
             CONSERVATIVE_HOLD: 'Conservative Hold',
             TIERED_HOLD: 'Tiered Hold',
             TIERED_CLASSIC_HOLD: 'Tiered Classic Hold',
@@ -1190,7 +1190,7 @@ def render_dashboard() -> str:
         }
 
         function updateTabComparison(trades, stats) {
-            let html = '<div class="card"><div class="card-header">Head-to-Head</div><table><thead><tr><th></th><th>Conservative</th><th>Tiered V2</th><th>Tiered Classic</th><th>Garbage Time</th></tr></thead><tbody>';
+            let html = '<div class="card"><div class="card-header">Head-to-Head</div><table><thead><tr><th></th><th>Conservative</th><th>Tiered V2</th><th>Tiered Classic</th><th>Bounceback</th></tr></thead><tbody>';
             ['win_rate','avg_win','avg_loss','best_trade','worst_trade','total_pnl'].forEach((r, i) => {
                 const labels = ['Win Rate','Avg Win','Avg Loss','Best','Worst','Total P&L'];
                 html += '<tr><td>' + labels[i] + '</td>';
@@ -1229,7 +1229,7 @@ def render_dashboard() -> str:
             const heavy12 = trades.filter(t => t.strategy === 'GARBAGE_TIME' && t.action === 'BUY' && Math.abs(t.pre_game_spread || 0) >= 12);
             if (heavy12.length > 0) {
                 const losses = heavy12.filter(t => trades.some(c => c.position_id === t.position_id && c.pnl_cents < 0));
-                if (losses.length === 0) insights.push('Garbage Time at 12+ spread has never lost.');
+                if (losses.length === 0) insights.push('Bounceback at 12+ spread has never lost.');
             }
             if (insights.length === 0) insights.push('No strong insights yet. Keep trading to gather data.');
             insights.forEach(i => { html += '<div class="insight-card">' + i + '</div>'; });
@@ -1285,7 +1285,7 @@ def render_dashboard() -> str:
                 ['CONSERVATIVE','Conservative'],
                 ['TIERED','Tiered V2'],
                 ['TIERED_CLASSIC','Tiered Classic'],
-                ['GARBAGE_TIME','Garbage Time'],
+                ['GARBAGE_TIME','Bounceback'],
                 ['CONSERVATIVE_HOLD','Conservative Hold'],
                 ['TIERED_HOLD','Tiered Hold'],
                 ['TIERED_CLASSIC_HOLD','Tiered Classic Hold'],
@@ -1321,7 +1321,7 @@ def render_dashboard() -> str:
 <div class="card guide-section">
     <h2>Strategy Guide (Source of Truth)</h2>
     <p>This tab mirrors the live code in <code>core/config.py</code> and <code>strategies/*.py</code>. The bot runs eight strategies in parallel with fixed bankrolls: $100 per strategy.</p>
-    <p>Global behavior: entries are Q1-Q2 by default, no new entries in final 2 minutes. Tiered/Tiered Classic/Garbage Time allow a limited Q3 Entry-2 window (first 6 minutes) with relaxed gates. Q3 has a neutral window before defensive mode, and each strategy has per-position tail-risk stops.</p>
+    <p>Global behavior: entries are Q1-Q2 by default, no new entries in final 2 minutes. Tiered/Tiered Classic allow a limited Q3 Entry-2 window (first 6 minutes) with relaxed gates. Bounceback is Q3-only. Q3 has a neutral window before defensive mode, and each strategy has per-position tail-risk stops.</p>
 </div>
 
 <hr class="guide-divider">
@@ -1369,14 +1369,16 @@ def render_dashboard() -> str:
 <hr class="guide-divider">
 
 <div class="card guide-section">
-    <h2 style="color:var(--heavy)">Garbage Time</h2>
+    <h2 style="color:var(--heavy)">Bounceback (Q3 Halftime-Dip)</h2>
     <ul>
-        <li>Entry 1 gates: spread &ge; 8, deficit_vs_spread &ge; 15, ask &le; 30&cent;, depth &ge; 50, Q1 or early Q2 (at least 8 min left).</li>
-        <li>Spread-scaled sizing multipliers: 1.0x (8-10), 1.25x (10-12), 1.5x (12+).</li>
-        <li>Entry 3+ is restricted to stronger favorites only (spread &ge; 10).</li>
-        <li>Entry 2 requires additional price drop; Q3 Entry-2 window (first 6 minutes) allows the second entry if price drops &ge; 15% from Entry 1 and depth &ge; 50.</li>
-        <li>Exits: 2.0x capital recovery (35%), 3.0x house-money-1 (20%), 60&cent; house-money-2 (20%), 40% trailing stop.</li>
-        <li>Risk controls: universal max-loss cap at -55% and defensive hard-floor / sell-into-strength behavior.</li>
+        <li>Q3-only strategy. Entry window: first 6 minutes of Q3 (halftime-dip exploitation).</li>
+        <li>Entry 1 gates: spread &ge; 5, favorite trailing by 6-18 pts, deficit_vs_spread &ge; 8, ask 15-42&cent;, price drop from tipoff &ge; 15%, depth &ge; 25.</li>
+        <li>Edge confirmation: if fair value available, requires &ge; 6% edge vs Kalshi price.</li>
+        <li>Entry 2: price must drop 20%+ from Entry 1, still in Q3 (&ge; 3 min left), deficit &lt; 25.</li>
+        <li>Sizing: 14% of bankroll per game (70/30 split between Entry 1 and 2).</li>
+        <li>Exits: TP1 +30% (sell 50%), TP2 at 50&cent; (sell rest), -35% stop (6 min hold guard), thesis invalid at deficit &gt; 30, time exit Q4 &lt; 5 min.</li>
+        <li>Remaining shares ride to settlement — need ~30% win rate at avg 30&cent; entry to profit.</li>
+        <li>Max concurrent positions: 3.</li>
         <li>Max concurrent positions: 2.</li>
     </ul>
 </div>
