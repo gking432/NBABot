@@ -72,7 +72,7 @@ FIXED_STRATEGY_BANKROLL_CENTS = 10000  # $100 per strategy
 CONSERVATIVE_BANKROLL_PCT = 0.30        # 30%
 TIERED_BANKROLL_PCT = 0.30              # 30% (V2: entry-price-scaled exits)
 TIERED_CLASSIC_BANKROLL_PCT = 0.30      # 30% (Classic: original 1.75x/3x/5x exits)
-HEAVY_FAVORITE_BANKROLL_PCT = 0.10      # 10%
+GARBAGE_TIME_BANKROLL_PCT = 0.10        # 10%
 
 # ─────────────────────────────────────────────
 # Strategy 1: CONSERVATIVE
@@ -192,39 +192,44 @@ TIER_CLASSIC_MAX_POSITION_LOSS_PCT = 0.55
 TIER_CLASSIC_MAX_CONCURRENT_POSITIONS = 3
 
 # ─────────────────────────────────────────────
-# Strategy 3: HEAVY FAVORITE COLLAPSE
+# Strategy 3: BOUNCEBACK (Q3 Halftime-Dip Specialist)
+# Buy the favorite's contract at the start of Q3 when
+# they're trailing by a moderate margin. Exploits halftime
+# pessimism selling and Q3 comeback patterns.
 # ─────────────────────────────────────────────
 
-HF_MIN_SPREAD = 8                  # Pre-game spread at least 8 points
-HF_MIN_DEFICIT_VS_SPREAD = 15
-HF_MAX_ENTRY_PRICE_CENTS = 30      # Won't buy above 30¢
-HF_MIN_BOOK_DEPTH = 50
-HF_MAX_ENTRY_QUARTER = 2
-HF_ENTRY1_MIN_TIME_LEFT_Q2_SEC = 480  # At least 8 min left in Q2 for Entry 1
+# Entry conditions
+GT_MIN_SPREAD = 5                   # Pre-game spread at least 5 (strong favorite)
+GT_ENTRY_WINDOW_Q3_SEC = 360        # First 6 min of Q3 (time_remaining >= 360)
+GT_MIN_TRAILING_POINTS = 6          # Favorite must be losing by at least 6
+GT_MAX_TRAILING_POINTS = 18         # But not more than 18 (blowout = low comeback rate)
+GT_MIN_DEFICIT_VS_SPREAD = 8        # Deficit vs spread must be >= 8
+GT_MIN_PRICE_CENTS = 15             # Kalshi yes_ask must be >= 15¢
+GT_MAX_PRICE_CENTS = 42             # Don't buy above 42¢ (need asymmetric payoff)
+GT_MIN_PRICE_DROP_PCT = 0.15        # Price must have dropped 15%+ from tipoff
+GT_MIN_BOOK_DEPTH = 25              # Minimum contracts on the book
+GT_MIN_EDGE_PCT = 0.06              # 6% edge vs fair value (if available)
 
-# Heavy favorite spread-scaled sizing
-HF_BASE_GAME_BUDGET_PCT = 0.24     # 24% base
-HF_SPREAD_8_10_MULT = 1.0          # 1x at spread 8-10
-HF_SPREAD_10_12_MULT = 1.25        # 1.25x at spread 10-12
-HF_SPREAD_12_PLUS_MULT = 1.5       # 1.5x at spread 12+
-HF_NUCLEAR_MATCHES_GAME = True     # Nuclear reserve matches game budget (including multiplier)
+# Sizing
+GT_BUDGET_PCT = 0.14                # 14% of bankroll per game
+GT_ENTRY1_BUDGET_SPLIT = 0.70       # 70% of game budget for Entry 1, 30% for Entry 2
 
-# Heavy favorite exits (more patient)
-HF_CAPITAL_RECOVERY_MULT = 2.0     # Higher threshold: sell 35% at 2x
-HF_CAPITAL_RECOVERY_SELL_PCT = 0.35
-HF_HOUSE_MONEY_1_MULT = 3.0        # Sell 20% at 3x
-HF_HOUSE_MONEY_1_SELL_PCT = 0.20
-HF_HOUSE_MONEY_2_PRICE_CENTS = 60  # Sell 20% at 60¢+
-HF_HOUSE_MONEY_2_SELL_PCT = 0.20
-HF_TRAILING_STOP_PCT = 0.40        # 40% from peak (tighter than tiered)
+# Entry 2 (averaging down)
+GT_ENTRY2_MIN_DROP_PCT = 0.20       # Price must drop 20% from Entry 1
+GT_ENTRY2_MIN_TIME_Q3_SEC = 180     # Must have >= 3 min left in Q3
+GT_ENTRY2_MAX_DEFICIT = 25          # Deficit can't have grown past 25
 
-# Heavy favorite stop loss
-HF_DEFENSIVE_HARD_FLOOR_PCT = 0.15
-HF_MAX_POSITION_LOSS_PCT = 0.55      # Universal hard stop for heavy favorite positions
-HF_ENTRY3_MIN_SPREAD = 10            # Entry 3/4 only for very strong favorites
+# Exits
+GT_TP1_PCT = 0.30                   # Take profit 1: +30% → sell 50%
+GT_TP1_SELL_PCT = 0.50              # Sell 50% of shares
+GT_TP2_PRICE_CENTS = 50             # Take profit 2: price >= 50¢ → sell remaining
+GT_STOP_LOSS_PCT = 0.35             # Stop loss at -35% (after hold period)
+GT_STOP_MIN_HOLD_SEC = 360          # Must hold 6 min before stop fires
+GT_THESIS_INVALID_DEFICIT = 30      # Deficit > 30 = thesis dead, sell all
+GT_TIME_EXIT_Q4_SEC = 300           # Q4 with < 5 min left → sell at market
 
-# Heavy favorite limits
-HF_MAX_CONCURRENT_POSITIONS = 2
+# Limits
+GT_MAX_CONCURRENT_POSITIONS = 3
 
 # ─────────────────────────────────────────────
 # Strategy 4: PULSE (Aggressive Momentum Scalp)
