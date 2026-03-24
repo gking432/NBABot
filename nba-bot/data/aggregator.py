@@ -51,6 +51,9 @@ class DataAggregator:
         self._last_kalshi_update = 0.0
         self._kalshi_update_count = -1  # Start at -1 so first update (count=0) fetches orderbook
 
+        # Never trust a quarter that goes backward vs max seen (ESPN stuck Q3 while game is Q4).
+        self._quarter_peak_by_game: Dict[str, int] = {}
+
     def initialize(self):
         """
         Run once at startup.
@@ -133,8 +136,36 @@ class DataAggregator:
             was_pre = state.game_status == GameStatus.PRE
             state.home_score = espn_game["home_score"]
             state.away_score = espn_game["away_score"]
-            state.quarter = espn_game["quarter"]
-            state.time_remaining_seconds = espn_game["time_remaining_seconds"]
+            raw_q = int(espn_game.get("quarter") or 0)
+            raw_t = int(espn_game.get("time_remaining_seconds") or 0)
+            gs = espn_game["game_status"]
+
+            if espn_game.get("game_id_nba"):
+                state.game_id_nba = espn_game["game_id_nba"]
+
+            if gs == GameStatus.PRE:
+                self._quarter_peak_by_game.pop(game_id, None)
+                state.quarter = raw_q
+                state.time_remaining_seconds = raw_t
+            elif gs in (GameStatus.LIVE, GameStatus.HALFTIME):
+                stored_peak = self._quarter_peak_by_game.get(game_id)
+                new_peak = max(raw_q, stored_peak if stored_peak is not None else raw_q)
+                self._quarter_peak_by_game[game_id] = new_peak
+                if stored_peak is not None and raw_q < stored_peak:
+                    state.quarter = stored_peak
+                    logger.warning(
+                        "Quarter regression ignored for %s: feed Q%s, holding Q%s (clock unchanged)",
+                        game_id,
+                        raw_q,
+                        stored_peak,
+                    )
+                else:
+                    state.quarter = new_peak
+                    state.time_remaining_seconds = raw_t
+            else:
+                state.quarter = raw_q
+                state.time_remaining_seconds = raw_t
+
             state.game_status = espn_game["game_status"]
             state.last_score_update = datetime.utcnow()
             # Preserve favorite during live — only backfill if missing
@@ -503,4 +534,5 @@ class DataAggregator:
 
         for game_id in to_remove:
             del self.games[game_id]
+            self._quarter_peak_by_game.pop(game_id, None)
             logger.info(f"Cleaned up finished game: {game_id}")

@@ -627,24 +627,53 @@ def render_dashboard() -> str:
 
         function updateTabOverview(s, trades, signals, performance, stats) {
             const risk = s.risk || {};
-            const bankrolls = risk.bankrolls || {};
+            const activePositions = s.active_positions || [];
+            const liveGames = s.live_games || [];
+            const gamesById = {};
+            liveGames.forEach(g => { gamesById[g.game_id] = g; });
+
             let html = '<div class="overview-grid"><div>';
-            html += '<div class="strategy-cards">';
-            for (const name of STRATEGIES) {
-                const color = strategyClass(name);
-                const bal = bankrolls[name] || 0;
-                const st = stats[name] || {};
-                const paused = (risk.strategy_pauses || {})[name];
-                const pausedGames = ((risk.paused_games || {})[name] || []).length;
-                html += `<div class="strategy-card ${color}">
-                    <div class="card-header">${STRATEGY_LABELS[name] || name.replace('_',' ')}</div>
-                    <div>Balance: ${fmt(bal)}</div>
-                    <div>Total P&L: <span class="${(st.total_pnl || 0) >= 0 ? 'positive' : 'negative'}">${fmt(st.total_pnl)}</span></div>
-                    <div>Win Rate: ${fmtPct(st.win_rate)}</div>
-                    <div>Active: ${(risk.positions_count || {})[name] || 0}</div>
-                    ${paused ? '<div class="negative">PAUSED (weekly limit)</div>' : ''}
-                    ${pausedGames > 0 ? '<div class="negative">' + pausedGames + ' game(s) paused</div>' : ''}
-                </div>`;
+            // ─── OPEN POSITIONS CARDS (one card per live position) ───
+            html += '<div class="card"><div class="card-header">Open Positions</div>';
+            if (activePositions.length === 0) {
+                html += '<div class="empty-state">No open positions</div>';
+            } else {
+                let totalUnrealized = 0;
+                html += '<div class="strategy-cards">';
+                activePositions.forEach(pos => {
+                    const game = gamesById[pos.game_id];
+                    const currentPrice = game ? (game.kalshi_bid || game.kalshi_ask || game.kalshi_last || 0) : 0;
+                    const avg = pos.avg_cost_cents || 0;
+                    const shares = pos.shares_remaining || 0;
+                    const remainingCost = Math.round(shares * avg);
+                    const currentValue = shares * currentPrice;
+                    const unrealizedPnl = currentPrice > 0 ? currentValue - remainingCost : 0;
+                    totalUnrealized += unrealizedPnl;
+                    const pnlClass = unrealizedPnl >= 0 ? 'positive' : 'negative';
+                    const color = strategyClass(pos.strategy);
+                    const stratLabel = STRATEGY_LABELS[pos.strategy] || (pos.strategy || '').replace(/_/g, ' ');
+                    const entries = pos.entries || [];
+                    const entryLines = entries.map((e, i) => 'Entry ' + (i + 1) + ': ' + (e.price || e.price_cents || '—') + '¢').join(' | ');
+                    const targets = getTPTargets(pos);
+                    const stopTarget = targets.find(t => /stop|recovery stop/i.test(t.label));
+                    const tpTargets = targets.filter(t => !/stop|recovery stop/i.test(t.label));
+                    const stopDist = (currentPrice > 0 && stopTarget) ? (currentPrice - stopTarget.price) : null;
+                    const stopStr = stopTarget ? stopTarget.price + '¢' + (stopDist != null ? (stopDist >= 0 ? ' (' + stopDist + '¢ away)' : ' <span class="negative">' + (-stopDist) + '¢ past</span>') : '') : '—';
+                    const tpStr = tpTargets.filter(t => !t.hit).map(t => t.label + ' ' + t.price + '¢').join(', ') || '—';
+                    html += `<div class="strategy-card ${color}">
+                        <div class="card-header">${pos.team || '—'} — ${stratLabel}</div>
+                        <div style="font-size:12px;margin-bottom:4px">${entryLines || 'Entry: —'}</div>
+                        <div style="font-size:12px">Current: ${currentPrice > 0 ? currentPrice + '¢' : '—'} | Shares: ${shares}</div>
+                        <div style="font-size:11px;color:var(--muted);margin-top:4px">Stop: ${stopStr}</div>
+                        <div style="font-size:11px;color:var(--muted)">TP: ${tpStr}</div>
+                        <div class="${pnlClass}" style="font-weight:bold;margin-top:6px">P&L: ${fmt(unrealizedPnl)}</div>
+                    </div>`;
+                });
+                html += '</div>';
+                if (activePositions.length > 1) {
+                    const totalClass = totalUnrealized >= 0 ? 'positive' : 'negative';
+                    html += '<div style="margin-top:8px;font-weight:bold;font-size:13px">Total Unrealized: <span class="' + totalClass + '">' + fmt(totalUnrealized) + '</span></div>';
+                }
             }
             html += '</div>';
 
@@ -687,13 +716,10 @@ def render_dashboard() -> str:
 
             html += '</div><div>';
 
-            // ─── OPEN POSITIONS CARD (swapped from left column) ───
-            const activePositions = s.active_positions || [];
-            const liveGames = s.live_games || [];
-            const gamesByIdOP = {};
-            liveGames.forEach(g => { gamesByIdOP[g.game_id] = g; });
+            // ─── POSITION DETAILS TABLE (right column) ───
+            const gamesByIdOP = gamesById;
 
-            html += '<div class="card"><div class="card-header">Open Positions</div>';
+            html += '<div class="card"><div class="card-header">Position Details</div>';
             if (activePositions.length === 0) {
                 html += '<div class="empty-state">No open positions</div>';
             } else {

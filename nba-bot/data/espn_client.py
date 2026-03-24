@@ -9,7 +9,7 @@ from datetime import datetime
 
 from core.config import ESPN_BASE_URL, NBA_CDN_BASE_URL
 from core.models import GameStatus
-from data.team_names import normalize_team_name
+from data.team_names import normalize_team_name, teams_match
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,15 @@ class ESPNClient:
         if games is None:
             logger.warning("ESPN unavailable, falling back to NBA CDN")
             games = self._fetch_nba_cdn()
+        else:
+            # Second source: ESPN's period/clock can lag or glitch (false Q3 while game is Q4).
+            # Merge with NBA CDN and use the *later* period + matching clock for trading gates.
+            try:
+                cdn_games = self._fetch_nba_cdn()
+                if cdn_games:
+                    self._merge_nba_cdn_quarter_clock(games, cdn_games)
+            except Exception as e:
+                logger.warning("NBA CDN merge skipped: %s", e)
 
         return games or []
 
@@ -147,6 +156,7 @@ class ESPNClient:
 
             return {
                 "game_id_espn": game_id,
+                "game_id_nba": None,  # Filled when merged from NBA CDN scoreboard
                 "home_team": home_team,
                 "away_team": away_team,
                 "home_score": home_score,
@@ -163,6 +173,57 @@ class ESPNClient:
         except (KeyError, IndexError, ValueError) as e:
             logger.warning(f"Failed to parse ESPN event: {e}")
             return None
+
+    @staticmethod
+    def _find_matching_cdn_game(espn_game: dict, cdn_games: List[dict]) -> Optional[dict]:
+        """Match ESPN row to NBA CDN row by canonical home/away."""
+        eh, ea = espn_game.get("home_team", ""), espn_game.get("away_team", "")
+        for cg in cdn_games:
+            ch, ca = cg.get("home_team", ""), cg.get("away_team", "")
+            if teams_match(eh, ch) and teams_match(ea, ca):
+                return cg
+            if teams_match(eh, ca) and teams_match(ea, ch):
+                return cg
+        return None
+
+    def _merge_nba_cdn_quarter_clock(self, espn_games: List[dict], cdn_games: List[dict]) -> None:
+        """
+        If NBA CDN reports a later period than ESPN, trust CDN for quarter + clock.
+        Prevents entries that should be blocked (e.g. Pulse Q4) when ESPN is stuck in Q3.
+        """
+        for eg in espn_games:
+            cg = self._find_matching_cdn_game(eg, cdn_games)
+            if not cg:
+                continue
+
+            # Only reconcile in-progress games (both sources agree roughly on phase)
+            eg_status = eg.get("game_status")
+            cg_status = cg.get("game_status")
+            if eg_status not in (GameStatus.LIVE, GameStatus.HALFTIME):
+                continue
+            if cg_status not in (GameStatus.LIVE, GameStatus.HALFTIME):
+                continue
+
+            eq = int(eg.get("quarter") or 0)
+            cq = int(cg.get("quarter") or 0)
+            if cq <= 0:
+                continue
+
+            if cq > eq:
+                logger.warning(
+                    "Quarter/time correction: ESPN Q%s vs NBA CDN Q%s (%s @ %s) — "
+                    "using CDN for quarter & clock (ESPN feed lag/stale)",
+                    eq,
+                    cq,
+                    eg.get("away_team"),
+                    eg.get("home_team"),
+                )
+                eg["quarter"] = cq
+                eg["time_remaining_seconds"] = int(cg.get("time_remaining_seconds") or 0)
+
+            # Attach NBA game id for PBP when ESPN doesn't carry it
+            if not eg.get("game_id_nba") and cg.get("game_id_nba"):
+                eg["game_id_nba"] = cg["game_id_nba"]
 
     def _parse_clock(self, clock_str: str) -> int:
         """Parse 'MM:SS' or 'M:SS' to seconds."""
