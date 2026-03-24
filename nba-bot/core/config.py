@@ -72,7 +72,7 @@ FIXED_STRATEGY_BANKROLL_CENTS = 10000  # $100 per strategy
 CONSERVATIVE_BANKROLL_PCT = 0.30        # 30%
 TIERED_BANKROLL_PCT = 0.30              # 30% (V2: entry-price-scaled exits)
 TIERED_CLASSIC_BANKROLL_PCT = 0.30      # 30% (Classic: original 1.75x/3x/5x exits)
-HEAVY_FAVORITE_BANKROLL_PCT = 0.10      # 10%
+GARBAGE_TIME_BANKROLL_PCT = 0.10        # 10%
 
 # ─────────────────────────────────────────────
 # Strategy 1: CONSERVATIVE
@@ -192,39 +192,35 @@ TIER_CLASSIC_MAX_POSITION_LOSS_PCT = 0.55
 TIER_CLASSIC_MAX_CONCURRENT_POSITIONS = 3
 
 # ─────────────────────────────────────────────
-# Strategy 3: HEAVY FAVORITE COLLAPSE
+# Strategy 3: GARBAGE TIME FAVORITE LOCK
+# Buy the favorite's contract during blowouts when
+# Kalshi price hasn't caught up to reality.
 # ─────────────────────────────────────────────
 
-HF_MIN_SPREAD = 8                  # Pre-game spread at least 8 points
-HF_MIN_DEFICIT_VS_SPREAD = 15
-HF_MAX_ENTRY_PRICE_CENTS = 30      # Won't buy above 30¢
-HF_MIN_BOOK_DEPTH = 50
-HF_MAX_ENTRY_QUARTER = 2
-HF_ENTRY1_MIN_TIME_LEFT_Q2_SEC = 480  # At least 8 min left in Q2 for Entry 1
+GT_MIN_ENTRY_QUARTER = 3            # Only enter in Q3 or Q4
+GT_Q3_MAX_TIME_REMAINING_SEC = 240  # Q3: enter only when ≤4:00 left
+GT_Q4_MIN_TIME_REMAINING_SEC = 360  # Q4: enter only when ≥6:00 left
+GT_MIN_LEAD_POINTS = 20             # Favorite must be ahead by ≥20
+GT_MIN_LEAD_HEAVY_FAV = 15          # ...or ≥15 if pre-game spread was 10+
+GT_HEAVY_FAV_SPREAD_THRESHOLD = 10  # Spread threshold for reduced lead requirement
+GT_MIN_FAVORITE_PRICE_CENTS = 80    # Kalshi yes_ask must be ≥80¢ (confirms blowout)
+GT_MAX_FAVORITE_PRICE_CENTS = 93    # Don't buy above 93¢ (need profit room)
+GT_MIN_BOOK_DEPTH = 20              # Minimum book depth
+GT_LEAD_STABILITY_SEC = 180         # Lead must not have shrunk in last 3 min (checked via momentum)
+GT_MOMENTUM_FLOOR = -0.2            # Momentum must be > -0.2 (not actively collapsing)
 
-# Heavy favorite spread-scaled sizing
-HF_BASE_GAME_BUDGET_PCT = 0.24     # 24% base
-HF_SPREAD_8_10_MULT = 1.0          # 1x at spread 8-10
-HF_SPREAD_10_12_MULT = 1.25        # 1.25x at spread 10-12
-HF_SPREAD_12_PLUS_MULT = 1.5       # 1.5x at spread 12+
-HF_NUCLEAR_MATCHES_GAME = True     # Nuclear reserve matches game budget (including multiplier)
+# Garbage time sizing
+GT_BUDGET_PCT = 0.15                # 15% of bankroll per position
 
-# Heavy favorite exits (more patient)
-HF_CAPITAL_RECOVERY_MULT = 2.0     # Higher threshold: sell 35% at 2x
-HF_CAPITAL_RECOVERY_SELL_PCT = 0.35
-HF_HOUSE_MONEY_1_MULT = 3.0        # Sell 20% at 3x
-HF_HOUSE_MONEY_1_SELL_PCT = 0.20
-HF_HOUSE_MONEY_2_PRICE_CENTS = 60  # Sell 20% at 60¢+
-HF_HOUSE_MONEY_2_SELL_PCT = 0.20
-HF_TRAILING_STOP_PCT = 0.40        # 40% from peak (tighter than tiered)
+# Garbage time exits
+GT_TAKE_PROFIT_CENTS = 97           # Sell when favorite hits 97¢
+GT_STOP_LOSS_LEAD_POINTS = 12       # If lead shrinks to ≤12, sell immediately
+GT_TIME_EXIT_Q4_REMAINING_SEC = 120 # With ≤2:00 left in Q4, sell if ≥95¢
+GT_TIME_EXIT_PRICE_FLOOR_CENTS = 95
+GT_STOP_LOSS_PRICE_PCT = 0.08       # Hard stop: -8% from entry price
 
-# Heavy favorite stop loss
-HF_DEFENSIVE_HARD_FLOOR_PCT = 0.15
-HF_MAX_POSITION_LOSS_PCT = 0.55      # Universal hard stop for heavy favorite positions
-HF_ENTRY3_MIN_SPREAD = 10            # Entry 3/4 only for very strong favorites
-
-# Heavy favorite limits
-HF_MAX_CONCURRENT_POSITIONS = 2
+# Garbage time limits
+GT_MAX_CONCURRENT_POSITIONS = 2
 
 # ─────────────────────────────────────────────
 # Strategy 4: PULSE (Aggressive Momentum Scalp)

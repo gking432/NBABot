@@ -26,7 +26,7 @@ from data.injury_detector import InjuryDetector
 from strategies.conservative import ConservativeStrategy
 from strategies.tiered import TieredStrategy
 from strategies.tiered_classic import TieredClassicStrategy
-from strategies.heavy_favorite import HeavyFavoriteStrategy
+from strategies.garbage_time import GarbageTimeStrategy
 from strategies.hold import ConservativeHoldStrategy, TieredHoldStrategy, TieredClassicHoldStrategy
 from strategies.pulse import PulseStrategy
 from trading.position_manager import PositionManager
@@ -72,9 +72,9 @@ class TradingBot:
             positions=self.position_manager.tiered_classic_positions,
             bankroll_cents=self.position_manager.bankrolls[Strategy.TIERED_CLASSIC],
         )
-        self.heavy_favorite = HeavyFavoriteStrategy(
-            positions=self.position_manager.heavy_favorite_positions,
-            bankroll_cents=self.position_manager.bankrolls[Strategy.HEAVY_FAVORITE],
+        self.garbage_time = GarbageTimeStrategy(
+            positions=self.position_manager.garbage_time_positions,
+            bankroll_cents=self.position_manager.bankrolls[Strategy.GARBAGE_TIME],
         )
 
         self.conservative_hold = ConservativeHoldStrategy(
@@ -95,7 +95,7 @@ class TradingBot:
         )
 
         self.strategies = [
-            self.conservative, self.tiered, self.tiered_classic, self.heavy_favorite,
+            self.conservative, self.tiered, self.tiered_classic, self.garbage_time,
             self.conservative_hold, self.tiered_hold, self.tiered_classic_hold,
             self.pulse,
         ]
@@ -227,8 +227,8 @@ class TradingBot:
         self.tiered_classic.update_bankroll(
             self.position_manager.bankrolls[Strategy.TIERED_CLASSIC]
         )
-        self.heavy_favorite.update_bankroll(
-            self.position_manager.bankrolls[Strategy.HEAVY_FAVORITE]
+        self.garbage_time.update_bankroll(
+            self.position_manager.bankrolls[Strategy.GARBAGE_TIME]
         )
         self.conservative_hold.update_bankroll(
             self.position_manager.bankrolls[Strategy.CONSERVATIVE_HOLD]
