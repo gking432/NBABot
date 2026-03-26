@@ -4,7 +4,7 @@ FastAPI backend that serves all data to the frontend.
 Cursor: Build the frontend HTML/JS/CSS in templates.py using these endpoints.
 """
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -51,13 +51,24 @@ def create_app(bot) -> FastAPI:
 
     # ─── Frontend (HTML) ───
 
-    @app.get("/", response_class=HTMLResponse)
+    @app.get("/")
     def dashboard():
-        """Main dashboard page. Cursor: build this in templates.py"""
+        """Main dashboard page — no-store so the browser never serves stale HTML/JS."""
         try:
             from dashboard.templates import render_dashboard
-            return render_dashboard()
+            body = render_dashboard()
+            return Response(
+                content=body,
+                media_type="text/html; charset=utf-8",
+                headers={
+                    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                    "Pragma": "no-cache",
+                },
+            )
         except Exception as e:
-            return f"<h1>Dashboard</h1><p>Template error: {e}</p><p>API available at /api/status</p>"
+            return HTMLResponse(
+                content=f"<h1>Dashboard</h1><p>Template error: {e}</p><p>API available at /api/status</p>",
+                headers={"Cache-Control": "no-store"},
+            )
 
     return app

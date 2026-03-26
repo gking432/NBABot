@@ -10,7 +10,7 @@ from datetime import datetime
 from core.models import (
     Position, EntryRecord, ExitRecord, EntrySignal, TradeRecord,
     LiveGameState, GameMode, PositionStatus, TradeAction,
-    Strategy, InjuryEvent, InjurySeverity
+    Strategy, InjuryEvent, InjurySeverity, strategy_from_stored_value,
 )
 from core.database import Database
 from data.injury_detector import InjuryDetector
@@ -107,9 +107,8 @@ class PositionManager:
         trade_count = 0
         for t in trades:
             strategy_str = t.get("strategy", "")
-            try:
-                strategy = Strategy(strategy_str)
-            except ValueError:
+            strategy = strategy_from_stored_value(strategy_str)
+            if strategy is None:
                 logger.warning(f"Unknown strategy in trade history: {strategy_str}")
                 continue
 
@@ -135,9 +134,8 @@ class PositionManager:
 
         restored = 0
         for pos_data in active:
-            try:
-                strategy = Strategy(pos_data["strategy"])
-            except ValueError:
+            strategy = strategy_from_stored_value(pos_data.get("strategy", ""))
+            if strategy is None:
                 continue
 
             position = Position(

@@ -110,8 +110,42 @@ def render_dashboard() -> str:
         tr:nth-child(even) { background: #f8fafc; }
         .positive { color: var(--positive); }
         .negative { color: var(--negative); }
-        .activity-feed { max-height: 360px; overflow-y: auto; }
+        .activity-feed { max-height: 520px; overflow-y: auto; }
         .activity-item { padding: 8px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+        .position-ledger { display: flex; flex-direction: column; gap: 12px; }
+        .ledger-pos {
+            border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+            background: #fbfcfe; box-shadow: 0 4px 14px rgba(18,24,38,0.06);
+        }
+        .ledger-pos-head {
+            display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px;
+            padding: 10px 14px; background: linear-gradient(180deg, #f1f5f9 0%, #e8eef5 100%);
+            border-bottom: 1px solid var(--border);
+        }
+        .ledger-pos-title { font-weight: 700; font-size: 13px; color: var(--text); }
+        .ledger-pos-title .strat-pill {
+            display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px;
+            font-size: 10px; font-weight: 700; letter-spacing: 0.03em; background: #111827; color: #fff;
+        }
+        .ledger-pos-stats {
+            display: flex; flex-wrap: wrap; gap: 14px; font-size: 11px; color: var(--muted);
+        }
+        .ledger-pos-stats span strong { color: var(--text); font-weight: 600; }
+        .ledger-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .ledger-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 520px; }
+        .ledger-table th {
+            text-align: left; padding: 6px 12px; background: #fff; color: var(--muted);
+            font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+            border-bottom: 1px solid var(--border);
+        }
+        .ledger-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        .ledger-table tr:last-child td { border-bottom: none; }
+        .ledger-side-long { color: var(--positive); font-weight: 700; font-size: 11px; }
+        .ledger-side-reduce { color: #b45309; font-weight: 700; font-size: 11px; }
+        .ledger-side-close { color: var(--negative); font-weight: 700; font-size: 11px; }
+        .ledger-settle-win { color: var(--positive); font-weight: 700; font-size: 11px; }
+        .ledger-settle-loss { color: var(--negative); font-weight: 700; font-size: 11px; }
+        .ledger-mono { font-variant-numeric: tabular-nums; }
         .chart-container { position: relative; height: 250px; margin-bottom: 20px; }
         .stats-row { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
         .stat-box { padding: 12px 16px; background: #f8fafc; border-radius: 12px; border: 1px solid var(--border); }
@@ -198,8 +232,11 @@ def render_dashboard() -> str:
             .game-score { font-size: 15px; }
             .live-games-panel { padding: 8px; min-height: auto; gap: 8px; }
 
-            .activity-feed { max-height: 200px; }
+            .activity-feed { max-height: 280px; }
             .activity-item { font-size: 10px; padding: 6px; word-break: break-word; white-space: normal; }
+            .ledger-pos-head { flex-direction: column; align-items: stretch !important; }
+            .ledger-table { font-size: 10px; min-width: 480px; }
+            .ledger-table th, .ledger-table td { padding: 5px 6px; }
 
             .games-toggle { padding: 8px 12px; font-size: 13px; }
             .insight-card { font-size: 12px; padding: 8px; }
@@ -246,7 +283,7 @@ def render_dashboard() -> str:
         <button class="tab-btn" data-tab="conservative">Conservative</button>
         <button class="tab-btn" data-tab="tiered">Tiered V2</button>
         <button class="tab-btn" data-tab="tieredClassic">Tiered Classic</button>
-        <button class="tab-btn" data-tab="heavy">Bounceback</button>
+        <button class="tab-btn" data-tab="bounceback">Bounceback</button>
         <button class="tab-btn" data-tab="conservativeHold">Conservative Hold</button>
         <button class="tab-btn" data-tab="tieredHold">Tiered Hold</button>
         <button class="tab-btn" data-tab="tieredClassicHold">Tiered Classic Hold</button>
@@ -260,7 +297,7 @@ def render_dashboard() -> str:
     <div id="tabConservative" class="tab-content"></div>
     <div id="tabTiered" class="tab-content"></div>
     <div id="tabTieredClassic" class="tab-content"></div>
-    <div id="tabHeavy" class="tab-content"></div>
+    <div id="tabBounceback" class="tab-content"></div>
     <div id="tabConservativeHold" class="tab-content"></div>
     <div id="tabTieredHold" class="tab-content"></div>
     <div id="tabTieredClassicHold" class="tab-content"></div>
@@ -290,11 +327,24 @@ def render_dashboard() -> str:
             TIERED: 'Tiered V2',
             TIERED_CLASSIC: 'Tiered Classic',
             GARBAGE_TIME: 'Bounceback',
+            HEAVY_FAVORITE: 'Bounceback',
             CONSERVATIVE_HOLD: 'Conservative Hold',
             TIERED_HOLD: 'Tiered Hold',
             TIERED_CLASSIC_HOLD: 'Tiered Classic Hold',
             PULSE: 'Pulse'
         };
+        function canonicalStrategy(strat) {
+            if (strat == null || strat === '') return '';
+            const s = String(strat).trim();
+            const bounceAliases = ['HEAVY_FAVORITE', 'Heavy Favorite', 'heavy_favorite', 'Heavy_Favorite', 'HEAVY FAVORITE'];
+            if (bounceAliases.indexOf(s) >= 0) return 'GARBAGE_TIME';
+            if (s.replace(/\s+/g, '_').toUpperCase() === 'HEAVY_FAVORITE') return 'GARBAGE_TIME';
+            return s;
+        }
+        function stratDisplay(strat) {
+            const c = canonicalStrategy(strat);
+            return STRATEGY_LABELS[strat] || STRATEGY_LABELS[c] || (c || '').replace(/_/g, ' ');
+        }
         let chartInstances = {};
         let refreshTimer = 10;
         let lastDataSignature = null;
@@ -325,26 +375,130 @@ def render_dashboard() -> str:
         }
         function todayChicago() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }); }
         function yesterdayChicago() { const d = new Date(); d.setDate(d.getDate() - 1); return d.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }); }
+        function escHtml(s) {
+            return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+        function ledgerSideLabel(action) {
+            if (action === 'BUY') return '<span class="ledger-side-long">OPEN / ADD</span>';
+            if (action === 'SELL_PARTIAL') return '<span class="ledger-side-reduce">REDUCE</span>';
+            if (action === 'SELL_ALL') return '<span class="ledger-side-close">CLOSE</span>';
+            if (action === 'SETTLED_WIN') return '<span class="ledger-settle-win">SETTLE WIN</span>';
+            if (action === 'SETTLED_LOSS') return '<span class="ledger-settle-loss">SETTLE LOSS</span>';
+            return '<span class="ledger-mono">' + escHtml(action) + '</span>';
+        }
+        function ledgerRowDetail(t) {
+            if (t.action === 'BUY') {
+                const en = t.entry_number != null ? '#' + t.entry_number : '';
+                const q = t.game_quarter != null ? 'Q' + t.game_quarter : '';
+                const gt = fmtGameTime(t);
+                const bits = ['Fill' + en, q, gt !== '—' ? gt : ''].filter(Boolean);
+                return bits.join(' · ');
+            }
+            return (t.reason || '—').slice(0, 100);
+        }
+        function parseTsMs(ts) {
+            if (!ts) return 0;
+            let s = String(ts).trim().replace(' ', 'T');
+            if (!s.endsWith('Z') && !/[+-]\\d{2}:\\d{2}$/.test(s)) s += 'Z';
+            const n = new Date(s).getTime();
+            return Number.isNaN(n) ? 0 : n;
+        }
+        function computePositionMetrics(rows) {
+            let buyShares = 0, buyCost = 0, sellShares = 0, totalPnl = 0;
+            rows.forEach(t => {
+                const sh = Number(t.shares) || 0;
+                if (t.action === 'BUY') {
+                    buyShares += sh;
+                    buyCost += t.total_cents != null ? t.total_cents : sh * (t.price_cents || 0);
+                }
+                if (t.action === 'SELL_PARTIAL' || t.action === 'SELL_ALL' || t.action === 'SETTLED_WIN' || t.action === 'SETTLED_LOSS') {
+                    sellShares += sh;
+                }
+                if (t.pnl_cents != null) totalPnl += t.pnl_cents;
+            });
+            const avgEntry = buyShares > 0 ? buyCost / buyShares : 0;
+            const remaining = buyShares - sellShares;
+            const status = remaining > 0.001 ? 'OPEN' : 'CLOSED';
+            return { buyShares, avgEntry, totalPnl, status, remaining };
+        }
+        function positionKey(t) {
+            return t.position_id || ((t.game_id || '') + '|' + (t.strategy || '') + '|' + (t.team || ''));
+        }
+        function groupTradesByPosition(tradeList) {
+            const m = {};
+            tradeList.forEach(t => {
+                const pid = positionKey(t);
+                if (!m[pid]) m[pid] = [];
+                m[pid].push(t);
+            });
+            Object.keys(m).forEach(k => {
+                m[k].sort((a, b) => parseTsMs(a.timestamp) - parseTsMs(b.timestamp));
+            });
+            return m;
+        }
+        /** Keep every fill for positions whose *first* trade (open) falls on the selected Chicago date — so exits after midnight UTC still show with that session. */
+        function filterTradesByPositionOpenDate(tradeList, dateVal) {
+            if (!tradeList || tradeList.length === 0) return [];
+            if (dateVal === 'all') return tradeList.slice();
+            const groups = groupTradesByPosition(tradeList);
+            const today = todayChicago();
+            const yesterday = yesterdayChicago();
+            const target = dateVal === 'today' ? today : (dateVal === 'yesterday' ? yesterday : null);
+            if (!target) return tradeList.slice();
+            const keep = new Set();
+            Object.keys(groups).forEach(pid => {
+                const rows = groups[pid];
+                const openChicagoDate = getDateLocal(rows[0].timestamp);
+                if (openChicagoDate === target) keep.add(pid);
+            });
+            return tradeList.filter(t => keep.has(positionKey(t)));
+        }
+        function buildPositionLedgerInner(tradeList, dateVal) {
+            const filtered = filterTradesByPositionOpenDate(tradeList, dateVal);
+            if (filtered.length === 0) {
+                return '<div class="empty-state">No positions for this filter</div>';
+            }
+            const groups = groupTradesByPosition(filtered);
+            const pids = Object.keys(groups).sort((a, b) => {
+                const ra = groups[a], rb = groups[b];
+                return parseTsMs(rb[rb.length - 1].timestamp) - parseTsMs(ra[ra.length - 1].timestamp);
+            }).slice(0, 50);
+            return '<div class="position-ledger">' + pids.map(pid => {
+                const rows = groups[pid];
+                const first = rows[0];
+                const meta = computePositionMetrics(rows);
+                const pnlCls = meta.totalPnl > 0 ? 'positive' : (meta.totalPnl < 0 ? 'negative' : '');
+                const statHtml = meta.status === 'OPEN'
+                    ? '<strong style="color:var(--positive)">OPEN</strong>'
+                    : '<strong style="color:var(--muted)">CLOSED</strong>';
+                let block = '<div class="ledger-pos"><div class="ledger-pos-head">';
+                block += '<div class="ledger-pos-title">' + escHtml(first.team || '—') + ' <span class="strat-pill">' + escHtml(stratDisplay(first.strategy)) + '</span></div>';
+                block += '<div class="ledger-pos-stats">';
+                block += '<span><strong>Avg entry</strong> ' + (meta.avgEntry > 0 ? meta.avgEntry.toFixed(1) + '¢' : '—') + '</span>';
+                block += '<span><strong>Contracts in</strong> ' + meta.buyShares + '</span>';
+                if (meta.status === 'OPEN') block += '<span><strong>Remaining</strong> ~' + (meta.remaining > 0 ? Math.round(meta.remaining) : 0) + '</span>';
+                block += '<span><strong>Realized P&amp;L</strong> <span class="' + pnlCls + '">' + fmt(meta.totalPnl) + '</span></span>';
+                block += '<span>' + statHtml + '</span>';
+                block += '</div></div>';
+                block += '<div class="ledger-wrap"><table class="ledger-table"><thead><tr>';
+                block += '<th>Time</th><th>Side</th><th>Qty</th><th>Price</th><th>Notional</th><th>Leg P&amp;L</th><th>Notes</th>';
+                block += '</tr></thead><tbody>';
+                block += rows.map(t => {
+                    const legPnl = t.action !== 'BUY' && t.pnl_cents != null ? fmt(t.pnl_cents) : '—';
+                    const legCls = (t.pnl_cents || 0) > 0 ? 'positive' : ((t.pnl_cents || 0) < 0 ? 'negative' : '');
+                    const nom = t.total_cents != null && t.total_cents > 0 ? fmt(t.total_cents) : '—';
+                    const pc = t.price_cents != null ? t.price_cents + '¢' : '—';
+                    return '<tr><td class="ledger-mono">' + fmtTs(t.timestamp) + '</td><td>' + ledgerSideLabel(t.action) + '</td><td class="ledger-mono">' + (t.shares != null ? t.shares : '—') + '</td><td class="ledger-mono">' + pc + '</td><td class="ledger-mono">' + nom + '</td><td class="ledger-mono ' + legCls + '">' + legPnl + '</td><td style="font-size:11px;color:var(--muted);max-width:220px">' + escHtml(ledgerRowDetail(t)) + '</td></tr>';
+                }).join('');
+                block += '</tbody></table></div></div>';
+                return block;
+            }).join('') + '</div>';
+        }
         function filterActivityFeed() {
             const sel = document.getElementById('activityDateFilter');
             const feed = document.getElementById('activityFeed');
-            if (!sel || !feed || !window._activityData) return;
-            const val = sel.value;
-            const today = todayChicago();
-            const yesterday = yesterdayChicago();
-            const filtered = window._activityData.filter(x => {
-                if (val === 'all') return true;
-                const d = getDateLocal(x.timestamp);
-                if (val === 'today') return d === today;
-                if (val === 'yesterday') return d === yesterday;
-                return true;
-            }).slice(0, 200);
-            feed.innerHTML = filtered.length === 0 ? '<div class="empty-state">No activity for this date</div>' :
-                filtered.map(x => {
-                    const pnl = x.pnl_cents;
-                    const cls = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
-                    return '<div class="activity-item ' + cls + '">' + fmtTs(x.timestamp) + ' | ' + (x.strategy || '') + ' | ' + (x.team || '') + ' | ' + (x.action || 'SIGNAL') + ' | ' + fmt(x.price_cents || x.kalshi_price) + ' | ' + (pnl != null ? fmt(pnl) : '') + '</div>';
-                }).join('');
+            if (!sel || !feed || !window._ledgerTrades) return;
+            feed.innerHTML = buildPositionLedgerInner(window._ledgerTrades, sel.value);
         }
         function fmtTs(ts) {
             if (!ts) return '—';
@@ -431,7 +585,7 @@ def render_dashboard() -> str:
             try {
                 const [status, trades, signals, positions, performance] = await Promise.all([
                     fetchJson('/api/status'),
-                    fetchJson('/api/trades?limit=200'),
+                    fetchJson('/api/trades?limit=500'),
                     fetchJson('/api/signals?limit=500'),
                     fetchJson('/api/positions/active'),
                     fetchJson('/api/performance?days=30')
@@ -467,7 +621,7 @@ def render_dashboard() -> str:
                     updateTabConservative(trades || [], positions || [], stats.CONSERVATIVE || {});
                     updateTabTiered(trades || [], positions || [], stats.TIERED || {});
                     updateTabTieredClassic(trades || [], positions || [], stats.TIERED_CLASSIC || {});
-                    updateTabHeavy(trades || [], positions || [], stats.GARBAGE_TIME || {});
+                    updateTabBounceback(trades || [], positions || [], stats.GARBAGE_TIME || {});
                     updateTabConservativeHold(trades || [], positions || [], stats.CONSERVATIVE_HOLD || {});
                     updateTabTieredHold(trades || [], positions || [], stats.TIERED_HOLD || {});
                     updateTabTieredClassicHold(trades || [], positions || [], stats.TIERED_CLASSIC_HOLD || {});
@@ -510,7 +664,7 @@ def render_dashboard() -> str:
                 const t = new Date(sig.timestamp).getTime();
                 if (t > fiveMinAgo && sig.game_id) {
                     if (!recentByGame[sig.game_id]) recentByGame[sig.game_id] = new Set();
-                    recentByGame[sig.game_id].add(sig.strategy);
+                    recentByGame[sig.game_id].add(canonicalStrategy(sig.strategy));
                 }
             });
 
@@ -556,10 +710,11 @@ def render_dashboard() -> str:
                         <div class="signal-dots">
                             ${STRATEGIES.map(st => {
                                 const cls = strategyClass(st);
-                                return `<span class="signal-dot ${cls}" style="opacity:${sigs.has(st) ? 1 : 0.25}" title="${st}${sigs.has(st) ? ' (signal in last 5m)' : ''}"></span>`;
+                                const lab = STRATEGY_LABELS[st] || st;
+                                return `<span class="signal-dot ${cls}" style="opacity:${sigs.has(st) ? 1 : 0.25}" title="${lab}${sigs.has(st) ? ' (signal in last 5m)' : ''}"></span>`;
                             }).join('')}
                         </div>
-                        ${pos ? `<div class="game-meta" style="margin-top:6px">Position: ${pos.strategy} (${pos.entry_count} entries) — ${pos.mode || '—'}</div>` : ''}
+                        ${pos ? `<div class="game-meta" style="margin-top:6px">Position: ${stratDisplay(pos.strategy)} (${pos.entry_count} entries) — ${pos.mode || '—'}</div>` : ''}
                     </div>
                 `;
             }).join('');
@@ -588,10 +743,10 @@ def render_dashboard() -> str:
                 targets.push({ label: 'HM1 (2.0x)', price: Math.round(avg * 2.0), hit: pos.house_money_1_hit });
                 targets.push({ label: 'HM2 (2.2x)', price: Math.round(avg * 2.2), hit: pos.house_money_2_hit });
                 targets.push({ label: 'Late Lock (80¢)', price: 80, hit: false });
-            } else if (strat === 'GARBAGE_TIME') {
-                targets.push({ label: 'Recovery (2x)', price: Math.round(avg * 2.0), hit: pos.capital_recovered });
-                targets.push({ label: 'HM1 (3x)', price: Math.round(avg * 3.0), hit: pos.house_money_1_hit });
-                targets.push({ label: 'HM2 (60¢)', price: 60, hit: pos.house_money_2_hit });
+            } else if (canonicalStrategy(strat) === 'GARBAGE_TIME') {
+                targets.push({ label: 'TP1 (+30%)', price: Math.round(avg * 1.30), hit: pos.capital_recovered });
+                targets.push({ label: 'TP2 (50¢)', price: 50, hit: false });
+                targets.push({ label: 'Stop (-35%, 6m hold)', price: Math.round(avg * 0.65), hit: false });
             } else if (strat === 'CONSERVATIVE_HOLD' || strat === 'TIERED_HOLD' || strat === 'TIERED_CLASSIC_HOLD') {
                 targets.push({ label: 'Settlement (100¢)', price: 100, hit: false });
             } else if (strat === 'PULSE') {
@@ -605,7 +760,7 @@ def render_dashboard() -> str:
             if (strat === 'CONSERVATIVE') return 'conservative';
             if (strat === 'TIERED') return 'tiered';
             if (strat === 'TIERED_CLASSIC') return 'tiered-classic';
-            if (strat === 'GARBAGE_TIME') return 'heavy';
+            if (canonicalStrategy(strat) === 'GARBAGE_TIME') return 'heavy';
             if (strat === 'CONSERVATIVE_HOLD') return 'conservative-hold';
             if (strat === 'TIERED_HOLD') return 'tiered-hold';
             if (strat === 'TIERED_CLASSIC_HOLD') return 'tiered-classic-hold';
@@ -617,7 +772,7 @@ def render_dashboard() -> str:
             if (strat === 'CONSERVATIVE') return 'var(--conservative)';
             if (strat === 'TIERED') return 'var(--tiered)';
             if (strat === 'TIERED_CLASSIC') return 'var(--tiered-classic)';
-            if (strat === 'GARBAGE_TIME') return 'var(--heavy)';
+            if (canonicalStrategy(strat) === 'GARBAGE_TIME') return 'var(--heavy)';
             if (strat === 'CONSERVATIVE_HOLD') return 'var(--conservative-hold)';
             if (strat === 'TIERED_HOLD') return 'var(--tiered-hold)';
             if (strat === 'TIERED_CLASSIC_HOLD') return 'var(--tiered-classic-hold)';
@@ -651,7 +806,7 @@ def render_dashboard() -> str:
                     totalUnrealized += unrealizedPnl;
                     const pnlClass = unrealizedPnl >= 0 ? 'positive' : 'negative';
                     const color = strategyClass(pos.strategy);
-                    const stratLabel = STRATEGY_LABELS[pos.strategy] || (pos.strategy || '').replace(/_/g, ' ');
+                    const stratLabel = stratDisplay(pos.strategy);
                     const entries = pos.entries || [];
                     const entryLines = entries.map((e, i) => 'Entry ' + (i + 1) + ': ' + (e.price || e.price_cents || '—') + '¢').join(' | ');
                     const targets = getTPTargets(pos);
@@ -695,23 +850,14 @@ def render_dashboard() -> str:
             });
             html += '</tbody></table></div>';
 
-            // ─── ALL ACTIVITY CARD (swapped from right column) ───
-            const combined = [
-                ...trades.map(t => ({ ...t, type: 'trade', sort: new Date((t.timestamp || '').replace(' ','T') + (String(t.timestamp||'').endsWith('Z') ? '' : 'Z')).getTime() })),
-                ...signals.filter(sg => sg.action_taken).map(sg => ({ ...sg, type: 'signal', sort: new Date((sg.timestamp || '').replace(' ','T') + (String(sg.timestamp||'').endsWith('Z') ? '' : 'Z')).getTime() }))
-            ].filter(x => !Number.isNaN(x.sort)).sort((a, b) => b.sort - a.sort);
-            window._activityData = combined;
-            html += '<div class="card"><div class="card-header">All Activity (Latest 200)</div>';
+            // ─── POSITION LEDGER (perps-style: entries / exits / avg / PnL by position) ───
+            window._ledgerTrades = (trades || []).slice().sort((a, b) => parseTsMs(b.timestamp) - parseTsMs(a.timestamp));
+            html += '<div class="card"><div class="card-header">Trade ledger (by position)</div>';
+            html += '<div class="guide-subtitle" style="margin:-8px 0 10px 0">Each card is one Kalshi position (entries, partials, closes, settlement). <strong>Date filter uses America/Chicago</strong> and matches the <strong>first fill</strong> (open) — so overnight exits (e.g. UTC next day) stay with that game. Signals: Signal Log tab.</div>';
             html += '<div class="filter-bar" style="margin-bottom:8px"><select id="activityDateFilter" onchange="filterActivityFeed()">';
-            html += '<option value="all">All</option><option value="today">Today</option><option value="yesterday">Yesterday</option>';
+            html += '<option value="all">All positions</option><option value="today">Opened today (Chicago)</option><option value="yesterday">Opened yesterday (Chicago)</option>';
             html += '</select></div><div class="activity-feed" id="activityFeed">';
-            const filtered = combined.slice(0, 200);
-            if (filtered.length === 0) html += '<div class="empty-state">No activity yet</div>';
-            else filtered.forEach(x => {
-                const pnl = x.pnl_cents;
-                const cls = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
-                html += `<div class="activity-item ${cls}">${fmtTs(x.timestamp)} | ${x.strategy || ''} | ${x.team || ''} | ${x.action || 'SIGNAL'} | ${fmt(x.price_cents || x.kalshi_price)} | ${pnl != null ? fmt(pnl) : ''}</div>`;
-            });
+            html += buildPositionLedgerInner(window._ledgerTrades, 'all');
             html += '</div></div>';
 
             html += '</div><div>';
@@ -757,7 +903,7 @@ def render_dashboard() -> str:
                     const pctClass = d.pctChange >= 0 ? 'positive' : 'negative';
                     html += '<tr>';
                     html += '<td><strong>' + (d.pos.team || '—') + '</strong></td>';
-                    html += '<td style="color:' + stratColor(d.pos.strategy) + '">' + (d.pos.strategy || '').replace('_', ' ') + '</td>';
+                    html += '<td style="color:' + stratColor(d.pos.strategy) + '">' + stratDisplay(d.pos.strategy) + '</td>';
                     html += '<td>' + (d.entryStr || '—') + '</td>';
                     html += '<td>' + d.avg.toFixed(1) + '¢</td>';
                     html += '<td>' + (d.currentPrice > 0 ? d.currentPrice + '¢' : '—') + '</td>';
@@ -779,7 +925,7 @@ def render_dashboard() -> str:
                     const pnlClass = d.unrealizedPnl >= 0 ? 'positive' : 'negative';
                     const pctClass = d.pctChange >= 0 ? 'positive' : 'negative';
                     html += '<div class="pos-mobile-item">';
-                    html += '<div class="pos-mobile-team" style="color:' + stratColor(d.pos.strategy) + '">' + (d.pos.team || '—') + ' <span style="font-size:11px;opacity:0.7">' + (d.pos.strategy || '').replace('_',' ') + '</span></div>';
+                    html += '<div class="pos-mobile-team" style="color:' + stratColor(d.pos.strategy) + '">' + (d.pos.team || '—') + ' <span style="font-size:11px;opacity:0.7">' + stratDisplay(d.pos.strategy) + '</span></div>';
                     html += '<div class="pos-mobile-row"><span>Entries: ' + (d.entryStr || '—') + '</span><span>Avg: ' + d.avg.toFixed(1) + '¢</span></div>';
                     html += '<div class="pos-mobile-row"><span>Current: ' + (d.currentPrice > 0 ? d.currentPrice + '¢' : '—') + '</span><span>Shares: ' + d.shares + '</span></div>';
                     html += '<div class="pos-mobile-row"><span>P&L: <span class="' + pnlClass + '">' + fmt(d.unrealizedPnl) + '</span></span>';
@@ -814,7 +960,8 @@ def render_dashboard() -> str:
                     pnlByDate[d] = {};
                     STRATEGIES.forEach(s => { pnlByDate[d][s] = 0; });
                 }
-                pnlByDate[d][t.strategy] = (pnlByDate[d][t.strategy] || 0) + pnl;
+                const sk = canonicalStrategy(t.strategy);
+                pnlByDate[d][sk] = (pnlByDate[d][sk] || 0) + pnl;
             });
             const dates = Object.keys(pnlByDate).sort();
             if (dates.length === 0) return;
@@ -1103,9 +1250,10 @@ def render_dashboard() -> str:
             }), COLORS.tieredClassic);
         }
 
-        function updateTabHeavy(trades, positions, st) {
-            const heavy = trades.filter(t => t.strategy === 'GARBAGE_TIME');
-            const active = positions.filter(p => p.strategy === 'GARBAGE_TIME');
+        function updateTabBounceback(trades, positions, st) {
+            const isBounceStrat = (s) => canonicalStrategy(s) === 'GARBAGE_TIME';
+            const heavy = trades.filter(t => isBounceStrat(t.strategy));
+            const active = positions.filter(p => isBounceStrat(p.strategy));
 
             let html = '<div class="stats-row">';
             html += `<div class="stat-box"><div class="stat-label">Total P&L</div><div class="stat-value ${(st?.total_pnl || 0) >= 0 ? 'positive' : 'negative'}">${fmt(st?.total_pnl)}</div></div>`;
@@ -1124,7 +1272,7 @@ def render_dashboard() -> str:
             const settled = heavy.filter(t => (t.reason || '').toUpperCase().includes('SETTLE'));
             const settledWins = settled.filter(t => (t.pnl_cents || 0) > 0);
 
-            html += '<div class="card"><div class="card-header">Spread Analysis</div><div class="chart-container"><canvas id="chartHeavySpread"></canvas></div></div>';
+            html += '<div class="card"><div class="card-header">Spread Analysis</div><div class="chart-container"><canvas id="chartBouncebackSpread"></canvas></div></div>';
             html += '<div class="card"><div class="card-header">Settlement Rate</div><p>Settled: ' + settled.length + ' trades, ' + settledWins.length + ' wins (' + (settled.length ? (settledWins.length / settled.length * 100).toFixed(1) : 0) + '%)</p></div>';
             html += '<div class="card"><div class="card-header">Active Positions</div>';
             if (active.length === 0) html += '<div class="empty-state">No active positions</div>';
@@ -1137,8 +1285,8 @@ def render_dashboard() -> str:
                 heavy.slice(0, 50).map(t => `<tr><td>${fmtTs(t.timestamp)}</td><td>${t.team}</td><td>${t.action}</td><td>${t.price_cents}¢</td><td class="${(t.pnl_cents || 0) >= 0 ? 'positive' : 'negative'}">${fmt(t.pnl_cents)}</td><td>${t.pre_game_spread ?? '—'}</td><td>${fmtGameTime(t)}</td><td>${fmtGameScore(t)}</td></tr>`).join('') + '</tbody></table>';
             html += '</div>';
 
-            document.getElementById('tabHeavy').innerHTML = html;
-            renderBarChart('chartHeavySpread', Object.keys(spreadBuckets), Object.values(spreadBuckets).map(arr => {
+            document.getElementById('tabBounceback').innerHTML = html;
+            renderBarChart('chartBouncebackSpread', Object.keys(spreadBuckets), Object.values(spreadBuckets).map(arr => {
                 const wins = arr.filter(t => heavy.some(c => c.position_id === t.position_id && c.pnl_cents > 0));
                 return arr.length ? (wins.length / arr.length) * 100 : 0;
             }), COLORS.heavy);
@@ -1226,7 +1374,7 @@ def render_dashboard() -> str:
                 const loss = tieredQ3.filter(t => trades.some(c => c.position_id === t.position_id && c.pnl_cents < 0));
                 if (loss.length > tieredQ3.length / 2) insights.push('Tiered loses on Q3 entries — restrict to Q1-Q2.');
             }
-            const heavy12 = trades.filter(t => t.strategy === 'GARBAGE_TIME' && t.action === 'BUY' && Math.abs(t.pre_game_spread || 0) >= 12);
+            const heavy12 = trades.filter(t => canonicalStrategy(t.strategy) === 'GARBAGE_TIME' && t.action === 'BUY' && Math.abs(t.pre_game_spread || 0) >= 12);
             if (heavy12.length > 0) {
                 const losses = heavy12.filter(t => trades.some(c => c.position_id === t.position_id && c.pnl_cents < 0));
                 if (losses.length === 0) insights.push('Bounceback at 12+ spread has never lost.');
@@ -1306,7 +1454,7 @@ def render_dashboard() -> str:
             html += '<div class="card"><table id="signalTable"><thead><tr><th>Timestamp</th><th>Strategy</th><th>Team</th><th>Type</th><th>Deficit</th><th>Edge</th><th>Price Drop</th><th>Kalshi</th><th>Spread</th><th>Conf</th><th>Traded</th><th>Skip Reason</th></tr></thead><tbody id="signalTableBody">';
                 filtered.forEach(s => {
                 const rowClass = s.action_taken ? 'positive' : '';
-                html += '<tr class="' + rowClass + '"><td>' + fmtTs(s.timestamp) + '</td><td>' + (s.strategy || '') + '</td><td>' + (s.team || '') + '</td><td>' + (s.signal_type || '') + '</td><td>' + (s.deficit ?? '—') + '</td><td>' + (s.edge != null ? (s.edge <= 1 ? (s.edge*100).toFixed(1) + '%' : s.edge + '%') : '—') + '</td><td>' + (s.price_drop_pct != null ? (s.price_drop_pct <= 1 ? (s.price_drop_pct*100).toFixed(1) + '%' : s.price_drop_pct + '%') : '—') + '</td><td>' + (s.kalshi_price ?? '—') + '¢</td><td>' + (s.pre_game_spread ?? '—') + '</td><td>' + (s.confidence ?? '—') + '</td><td>' + (s.action_taken ? 'Yes' : 'No') + '</td><td>' + (s.skip_reason || '—') + '</td></tr>';
+                html += '<tr class="' + rowClass + '"><td>' + fmtTs(s.timestamp) + '</td><td>' + stratDisplay(s.strategy) + '</td><td>' + (s.team || '') + '</td><td>' + (s.signal_type || '') + '</td><td>' + (s.deficit ?? '—') + '</td><td>' + (s.edge != null ? (s.edge <= 1 ? (s.edge*100).toFixed(1) + '%' : s.edge + '%') : '—') + '</td><td>' + (s.price_drop_pct != null ? (s.price_drop_pct <= 1 ? (s.price_drop_pct*100).toFixed(1) + '%' : s.price_drop_pct + '%') : '—') + '</td><td>' + (s.kalshi_price ?? '—') + '¢</td><td>' + (s.pre_game_spread ?? '—') + '</td><td>' + (s.confidence ?? '—') + '</td><td>' + (s.action_taken ? 'Yes' : 'No') + '</td><td>' + (s.skip_reason || '—') + '</td></tr>';
             });
             html += '</tbody></table></div>';
             document.getElementById('tabSignals').innerHTML = html;

@@ -4,7 +4,7 @@ Every object that flows through the system is defined here.
 """
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from enum import Enum
 import uuid
 
@@ -25,6 +25,31 @@ class Strategy(str, Enum):
     TIERED_HOLD = "TIERED_HOLD"
     TIERED_CLASSIC_HOLD = "TIERED_CLASSIC_HOLD"
     PULSE = "PULSE"
+
+
+# DB / exports may still use these for the strategy that is now Strategy.GARBAGE_TIME (Bounceback).
+BOUNCEBACK_STRATEGY_DB_ALIASES: Tuple[str, ...] = (
+    "HEAVY_FAVORITE",
+    "Heavy Favorite",
+    "heavy_favorite",
+    "Heavy_Favorite",
+    "HEAVY FAVORITE",
+)
+
+
+def strategy_from_stored_value(value: Optional[str]) -> Optional[Strategy]:
+    """Map persisted DB strategy strings to enum (handles renames)."""
+    if not value:
+        return None
+    v = value.strip()
+    if v in BOUNCEBACK_STRATEGY_DB_ALIASES:
+        return Strategy.GARBAGE_TIME
+    if v.replace(" ", "_").upper() == "HEAVY_FAVORITE":
+        return Strategy.GARBAGE_TIME
+    try:
+        return Strategy(v)
+    except ValueError:
+        return None
 
 
 class GameMode(str, Enum):

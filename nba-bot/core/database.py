@@ -9,19 +9,24 @@ from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 from sqlalchemy import (
     create_engine, Column, Integer, Float, String, Boolean,
-    DateTime, Text, Index
+    DateTime, Text, Index, text,
 )
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
 
 from core.config import DB_PATH
 from core.models import (
     LiveGameState, EntrySignal, TradeRecord, Position,
-    InjuryEvent, DailyPerformance, Strategy, TradeAction, GameMode
+    InjuryEvent, DailyPerformance, Strategy, TradeAction, GameMode,
+    BOUNCEBACK_STRATEGY_DB_ALIASES,
+    strategy_from_stored_value,
 )
 
 logger = logging.getLogger(__name__)
 
 Base = declarative_base()
+
+# Bounceback row match: current enum value plus any legacy labels still in SQLite.
+_BOUNCEBACK_DB_VALUES = (Strategy.GARBAGE_TIME.value,) + BOUNCEBACK_STRATEGY_DB_ALIASES
 
 
 # ─────────────────────────────────────────────
@@ -189,9 +194,34 @@ class Database:
 
         self.engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
         Base.metadata.create_all(self.engine)
+        self._migrate_legacy_strategy_names()
         self.SessionLocal = sessionmaker(bind=self.engine)
 
         logger.info(f"Database initialized at {DB_PATH}")
+
+    def _migrate_legacy_strategy_names(self):
+        """Rename legacy Heavy Favorite labels to GARBAGE_TIME (Bounceback)."""
+        try:
+            with self.engine.begin() as conn:
+                for table in ("trades", "positions", "signals", "daily_performance"):
+                    for old in BOUNCEBACK_STRATEGY_DB_ALIASES:
+                        r = conn.execute(
+                            text(
+                                f"UPDATE {table} SET strategy = :new "
+                                "WHERE strategy = :old"
+                            ),
+                            {"new": "GARBAGE_TIME", "old": old},
+                        )
+                        n = r.rowcount or 0
+                        if n:
+                            logger.info(
+                                "Migrated %s rows in %s: %r → GARBAGE_TIME",
+                                n,
+                                table,
+                                old,
+                            )
+        except Exception as e:
+            logger.warning("Legacy strategy migration skipped: %s", e)
 
     def get_session(self) -> Session:
         return self.SessionLocal()
@@ -437,7 +467,10 @@ class Database:
         try:
             query = session.query(TradeRow)
             if strategy:
-                query = query.filter(TradeRow.strategy == strategy)
+                if strategy == "GARBAGE_TIME":
+                    query = query.filter(TradeRow.strategy.in_(_BOUNCEBACK_DB_VALUES))
+                else:
+                    query = query.filter(TradeRow.strategy == strategy)
             if since:
                 query = query.filter(TradeRow.timestamp >= since)
             query = query.order_by(TradeRow.timestamp.desc()).limit(limit)
@@ -453,7 +486,10 @@ class Database:
         try:
             query = session.query(SignalRow)
             if strategy:
-                query = query.filter(SignalRow.strategy == strategy)
+                if strategy == "GARBAGE_TIME":
+                    query = query.filter(SignalRow.strategy.in_(_BOUNCEBACK_DB_VALUES))
+                else:
+                    query = query.filter(SignalRow.strategy == strategy)
             query = query.order_by(SignalRow.timestamp.desc()).limit(limit)
             return [self._row_to_dict(row) for row in query.all()]
         finally:
@@ -474,8 +510,13 @@ class Database:
         """Check if an active position already exists for this strategy + game."""
         session = self.get_session()
         try:
+            strat_filter = (
+                PositionRow.strategy.in_(_BOUNCEBACK_DB_VALUES)
+                if strategy == Strategy.GARBAGE_TIME.value
+                else PositionRow.strategy == strategy
+            )
             count = session.query(PositionRow).filter(
-                PositionRow.strategy == strategy,
+                strat_filter,
                 PositionRow.game_id == game_id,
                 PositionRow.status.in_(["ACTIVE", "CAPITAL_RECOVERED"]),
             ).count()
@@ -537,7 +578,12 @@ class Database:
         """Calculate aggregate stats for a strategy."""
         session = self.get_session()
         try:
-            trades = session.query(TradeRow).filter_by(strategy=strategy).all()
+            if strategy == "GARBAGE_TIME":
+                trades = session.query(TradeRow).filter(
+                    TradeRow.strategy.in_(_BOUNCEBACK_DB_VALUES)
+                ).all()
+            else:
+                trades = session.query(TradeRow).filter_by(strategy=strategy).all()
 
             wins = [t for t in trades if t.pnl_cents and t.pnl_cents > 0
                     and t.action in ("SELL_ALL", "SETTLED_WIN")]
@@ -563,4 +609,15 @@ class Database:
         """Convert a SQLAlchemy row to a plain dict."""
         if row is None:
             return {}
-        return {c.name: getattr(row, c.name) for c in row.__table__.columns}
+        d = {c.name: getattr(row, c.name) for c in row.__table__.columns}
+        if "strategy" in d and d["strategy"]:
+            parsed = strategy_from_stored_value(str(d["strategy"]))
+            if parsed is not None:
+                d["strategy"] = parsed.value
+        if "reason" in d and d["reason"]:
+            r = str(d["reason"])
+            if "Heavy Favorite" in r:
+                d["reason"] = r.replace("Heavy Favorite", "Bounceback")
+            elif "heavy favorite" in r:
+                d["reason"] = r.replace("heavy favorite", "Bounceback")
+        return d
