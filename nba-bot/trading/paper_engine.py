@@ -34,16 +34,16 @@ class PaperTradingEngine:
         In reality, limit orders might fill better, so paper trading
         is slightly pessimistic (conservative estimate).
         """
-        ask_price = state.kalshi_yes_ask
+        ask_price = signal.kalshi_price_cents
         if ask_price is None:
-            logger.warning(f"No ask price available for {state.kalshi_market_ticker}")
+            logger.warning(f"No ask price available for {signal.kalshi_ticker}")
             return None
 
         # Check if we can fill the quantity at this price
-        if state.kalshi_book_depth < signal.suggested_shares:
+        if signal.orderbook_depth < signal.suggested_shares:
             logger.warning(
                 f"Insufficient depth: need {signal.suggested_shares} contracts, "
-                f"only {state.kalshi_book_depth} available"
+                f"only {signal.orderbook_depth} available"
             )
             # Still fill, but log the concern (in real trading we'd adjust)
             pass

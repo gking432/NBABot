@@ -28,6 +28,7 @@ from strategies.tiered import TieredStrategy
 from strategies.tiered_classic import TieredClassicStrategy
 from strategies.garbage_time import GarbageTimeStrategy
 from strategies.hold import ConservativeHoldStrategy, TieredHoldStrategy, TieredClassicHoldStrategy
+from strategies.flip import ConservativeHoldFlipStrategy, TieredHoldFlipStrategy, TieredFlipStrategy
 from strategies.pulse import PulseStrategy
 from trading.position_manager import PositionManager
 from trading.paper_engine import PaperTradingEngine
@@ -81,13 +82,25 @@ class TradingBot:
             positions=self.position_manager.conservative_hold_positions,
             bankroll_cents=self.position_manager.bankrolls[Strategy.CONSERVATIVE_HOLD],
         )
+        self.conservative_hold_flip = ConservativeHoldFlipStrategy(
+            positions=self.position_manager.conservative_hold_flip_positions,
+            bankroll_cents=self.position_manager.bankrolls[Strategy.CONSERVATIVE_HOLD_FLIP],
+        )
         self.tiered_hold = TieredHoldStrategy(
             positions=self.position_manager.tiered_hold_positions,
             bankroll_cents=self.position_manager.bankrolls[Strategy.TIERED_HOLD],
         )
+        self.tiered_hold_flip = TieredHoldFlipStrategy(
+            positions=self.position_manager.tiered_hold_flip_positions,
+            bankroll_cents=self.position_manager.bankrolls[Strategy.TIERED_HOLD_FLIP],
+        )
         self.tiered_classic_hold = TieredClassicHoldStrategy(
             positions=self.position_manager.tiered_classic_hold_positions,
             bankroll_cents=self.position_manager.bankrolls[Strategy.TIERED_CLASSIC_HOLD],
+        )
+        self.tiered_flip = TieredFlipStrategy(
+            positions=self.position_manager.tiered_flip_positions,
+            bankroll_cents=self.position_manager.bankrolls[Strategy.TIERED_FLIP],
         )
         self.pulse = PulseStrategy(
             positions=self.position_manager.pulse_positions,
@@ -96,7 +109,9 @@ class TradingBot:
 
         self.strategies = [
             self.conservative, self.tiered, self.tiered_classic, self.garbage_time,
-            self.conservative_hold, self.tiered_hold, self.tiered_classic_hold,
+            self.conservative_hold, self.conservative_hold_flip,
+            self.tiered_hold, self.tiered_hold_flip, self.tiered_classic_hold,
+            self.tiered_flip,
             self.pulse,
         ]
 
@@ -233,11 +248,20 @@ class TradingBot:
         self.conservative_hold.update_bankroll(
             self.position_manager.bankrolls[Strategy.CONSERVATIVE_HOLD]
         )
+        self.conservative_hold_flip.update_bankroll(
+            self.position_manager.bankrolls[Strategy.CONSERVATIVE_HOLD_FLIP]
+        )
         self.tiered_hold.update_bankroll(
             self.position_manager.bankrolls[Strategy.TIERED_HOLD]
         )
+        self.tiered_hold_flip.update_bankroll(
+            self.position_manager.bankrolls[Strategy.TIERED_HOLD_FLIP]
+        )
         self.tiered_classic_hold.update_bankroll(
             self.position_manager.bankrolls[Strategy.TIERED_CLASSIC_HOLD]
+        )
+        self.tiered_flip.update_bankroll(
+            self.position_manager.bankrolls[Strategy.TIERED_FLIP]
         )
         self.pulse.update_bankroll(
             self.position_manager.bankrolls[Strategy.PULSE]
@@ -326,7 +350,7 @@ class TradingBot:
             # Live trading — place real order on Kalshi
             # TODO: Implement in Week 4
             result = self.kalshi.place_order(
-                ticker=state.kalshi_market_ticker,
+                ticker=signal.kalshi_ticker,
                 side="yes",
                 action="buy",
                 count=signal.suggested_shares,
@@ -439,16 +463,25 @@ class TradingBot:
 
     def _position_to_dict(self, pos: Position) -> dict:
         """Convert Position to dict for API/dashboard."""
+        state = self.aggregator.get_game(pos.game_id)
+        current_bid = None
+        current_ask = None
+        if state:
+            current_bid = state.get_bid_for_side(pos.contract_side)
+            current_ask = state.get_ask_for_side(pos.contract_side)
         return {
             "position_id": pos.position_id,
             "game_id": pos.game_id,
             "team": pos.team,
             "strategy": pos.strategy.value,
+            "kalshi_ticker": pos.kalshi_ticker,
             "entry_count": pos.entry_count,
             "total_shares": pos.total_shares,
             "shares_remaining": pos.shares_remaining,
             "avg_cost_cents": round(pos.avg_cost_cents, 1),
             "total_cost_cents": pos.total_cost_cents,
+            "current_bid_cents": current_bid,
+            "current_ask_cents": current_ask,
             "status": pos.status.value,
             "capital_recovered": pos.capital_recovered,
             "mode": pos.current_mode.value,

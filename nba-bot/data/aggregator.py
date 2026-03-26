@@ -7,7 +7,7 @@ import logging
 from typing import Dict, Optional, List
 from datetime import datetime
 
-from core.models import LiveGameState, GameStatus
+from core.models import LiveGameState, GameStatus, ContractSide
 from data.espn_client import ESPNClient
 from data.odds_client import OddsClient
 from data.betstack_client import BetStackClient
@@ -267,55 +267,37 @@ class DataAggregator:
         updated_count = 0
 
         for game_id, state in self.games.items():
-            if not state.kalshi_market_ticker:
+            if not state.kalshi_favorite_ticker and not state.kalshi_underdog_ticker:
                 continue
             matched_count += 1
 
-            ticker = state.kalshi_market_ticker
-            prices = self.kalshi.get_market_prices(ticker)
+            updated_any = False
+            for side_name, ticker in (
+                ("favorite", state.kalshi_favorite_ticker),
+                ("underdog", state.kalshi_underdog_ticker),
+            ):
+                if not ticker:
+                    continue
+                prices = self.kalshi.get_market_prices(ticker)
 
-            if prices:
-                bid = prices.get("yes_bid")
-                ask = prices.get("yes_ask")
-                last = prices.get("last_price")
-                status = prices.get("status", "")
+                if prices:
+                    updated_any = True
+                    updated_count += 1
+                    self._apply_market_prices(
+                        state=state,
+                        ticker=ticker,
+                        prices=prices,
+                        side_name=side_name,
+                        fetch_orderbook=fetch_orderbook,
+                    )
+                else:
+                    logger.warning(f"Kalshi price fetch returned None for {ticker}")
 
-                state.kalshi_yes_bid = bid
-                state.kalshi_yes_ask = ask
-                state.kalshi_last_price = last
-                state.kalshi_volume = prices.get("volume", 0)
-                state.kalshi_open_interest = prices.get("open_interest", 0)
-                state.kalshi_market_status = status
-                state.last_kalshi_update = datetime.utcnow()
-                updated_count += 1
-
-                # Bid-ask spread
-                if bid and ask:
-                    state.kalshi_bid_ask_spread = ask - bid
-
-                # Opening and tipoff prices
-                if ticker in self._opening_prices:
-                    state.kalshi_opening_price = self._opening_prices[ticker]
-                if ticker in self._tipoff_prices:
-                    state.kalshi_tipoff_price = self._tipoff_prices[ticker]
-
-                # Order book depth
-                if fetch_orderbook:
-                    depth = self.kalshi.get_orderbook_depth_at_ask(ticker)
-                    state.kalshi_book_depth = depth
-
-                # If no fair value from BetStack/Odds, derive from Kalshi prices
-                if state.fair_value_home is None and ask is not None:
+            if updated_any:
+                if state.fair_value_home is None and state.kalshi_yes_ask is not None:
                     self._apply_kalshi_fallback(state)
                 else:
                     self._calculate_derived_signals(state)
-
-                logger.debug(
-                    f"Kalshi {ticker}: bid={bid} ask={ask} last={last} "
-                    f"status={status} depth={state.kalshi_book_depth}"
-                )
-            else:
-                logger.warning(f"Kalshi price fetch returned None for {ticker}")
 
         if matched_count > 0:
             logger.info(
@@ -339,11 +321,14 @@ class DataAggregator:
         home_abbrev = get_abbreviation(state.home_team)
         away_abbrev = get_abbreviation(state.away_team)
         fav_abbrev = get_abbreviation(state.favorite) if state.favorite else home_abbrev
+        dog_abbrev = get_abbreviation(state.underdog) if state.underdog else away_abbrev
 
         # Kalshi ticker format: KXNBAGAME-26MAR14WASBOS-BOS
         # The middle segment contains both team codes concatenated (e.g., WASBOS)
         # The suffix after the last dash is the team "yes" represents
 
+        favorite_market = None
+        underdog_market = None
         for ticker, market_data in self.kalshi_market_map.items():
             # Extract the team-code segment from the ticker
             # e.g., "KXNBAGAME-26MAR14WASBOS-BOS" → middle part contains "WASBOS"
@@ -361,23 +346,23 @@ class DataAggregator:
 
             # Pick the market where "yes" = favorite
             if ticker_suffix == fav_abbrev:
-                state.kalshi_market_ticker = ticker
-                state.kalshi_event_ticker = market_data.get("event_ticker")
-                state.kalshi_yes_team = state.favorite
-                # Use bid/ask from discover data so dashboard shows prices immediately
-                bid = market_data.get("yes_bid")
-                ask = market_data.get("yes_ask")
-                last = market_data.get("last_price")
-                state.kalshi_yes_bid = bid
-                state.kalshi_yes_ask = ask
-                state.kalshi_last_price = last
-                state.last_kalshi_update = datetime.utcnow()
-                self._calculate_derived_signals(state)
-                logger.info(
-                    f"Matched {state.home_team} vs {state.away_team} → {ticker} "
-                    f"(yes={fav_abbrev}, bid={bid}, ask={ask}, last={last})"
-                )
-                return
+                favorite_market = (ticker, market_data)
+            elif ticker_suffix == dog_abbrev:
+                underdog_market = (ticker, market_data)
+
+        if favorite_market:
+            self._apply_discovered_market(state, favorite_market[0], favorite_market[1], "favorite")
+        if underdog_market:
+            self._apply_discovered_market(state, underdog_market[0], underdog_market[1], "underdog")
+
+        if favorite_market:
+            self._sync_favorite_contract_fields(state)
+            self._calculate_derived_signals(state)
+            logger.info(
+                f"Matched {state.home_team} vs {state.away_team} → fav={state.kalshi_favorite_ticker} "
+                f"dog={state.kalshi_underdog_ticker}"
+            )
+            return
 
         logger.warning(
             f"No Kalshi market found for {state.home_team} ({home_abbrev}) vs "
@@ -387,12 +372,121 @@ class DataAggregator:
 
     def _record_tipoff_prices(self, state: LiveGameState):
         """Record the Kalshi price at the moment the game tips off."""
-        if state.kalshi_market_ticker and state.kalshi_yes_ask:
-            self._tipoff_prices[state.kalshi_market_ticker] = state.kalshi_yes_ask
+        if state.kalshi_favorite_ticker and state.kalshi_yes_ask:
+            self._tipoff_prices[state.kalshi_favorite_ticker] = state.kalshi_yes_ask
             state.kalshi_tipoff_price = state.kalshi_yes_ask
+        if state.kalshi_underdog_ticker and state.kalshi_underdog_ask:
+            self._tipoff_prices[state.kalshi_underdog_ticker] = state.kalshi_underdog_ask
+            state.kalshi_underdog_tipoff_price = state.kalshi_underdog_ask
+        if state.kalshi_favorite_ticker or state.kalshi_underdog_ticker:
             logger.info(
-                f"Tipoff price for {state.kalshi_market_ticker}: {state.kalshi_yes_ask}¢"
+                f"Tipoff prices for {state.game_id_espn}: fav={state.kalshi_tipoff_price}¢ "
+                f"dog={state.kalshi_underdog_tipoff_price}¢"
             )
+
+    def _apply_discovered_market(self, state: LiveGameState, ticker: str, market_data: dict, side_name: str):
+        team = state.favorite if side_name == "favorite" else state.underdog
+        bid = market_data.get("yes_bid")
+        ask = market_data.get("yes_ask")
+        last = market_data.get("last_price")
+        status = market_data.get("status", "")
+        self._set_market_leg(
+            state=state,
+            side_name=side_name,
+            ticker=ticker,
+            team=team,
+            bid=bid,
+            ask=ask,
+            last=last,
+            volume=market_data.get("volume_24h", 0),
+            open_interest=market_data.get("open_interest", 0),
+            status=status,
+        )
+        state.kalshi_event_ticker = market_data.get("event_ticker")
+        state.last_kalshi_update = datetime.utcnow()
+
+    def _apply_market_prices(self, state: LiveGameState, ticker: str, prices: dict, side_name: str, fetch_orderbook: bool):
+        team = state.favorite if side_name == "favorite" else state.underdog
+        bid = prices.get("yes_bid")
+        ask = prices.get("yes_ask")
+        last = prices.get("last_price")
+        status = prices.get("status", "")
+        depth = None
+        if fetch_orderbook:
+            depth = self.kalshi.get_orderbook_depth_at_ask(ticker)
+        self._set_market_leg(
+            state=state,
+            side_name=side_name,
+            ticker=ticker,
+            team=team,
+            bid=bid,
+            ask=ask,
+            last=last,
+            volume=prices.get("volume", 0),
+            open_interest=prices.get("open_interest", 0),
+            status=status,
+            depth=depth,
+        )
+        opening = self._opening_prices.get(ticker)
+        tipoff = self._tipoff_prices.get(ticker)
+        if side_name == "favorite":
+            state.kalshi_opening_price = opening
+            state.kalshi_tipoff_price = tipoff
+        else:
+            state.kalshi_underdog_opening_price = opening
+            state.kalshi_underdog_tipoff_price = tipoff
+        state.last_kalshi_update = datetime.utcnow()
+        self._sync_favorite_contract_fields(state)
+        logger.debug(
+            f"Kalshi {ticker} ({side_name}): bid={bid} ask={ask} last={last} "
+            f"status={status} depth={state.get_book_depth_for_side(ContractSide.UNDERDOG_YES if side_name == 'underdog' else ContractSide.FAVORITE_YES)}"
+        )
+
+    def _set_market_leg(
+        self,
+        state: LiveGameState,
+        side_name: str,
+        ticker: str,
+        team: str,
+        bid: Optional[int],
+        ask: Optional[int],
+        last: Optional[int],
+        volume: int,
+        open_interest: int,
+        status: str,
+        depth: Optional[int] = None,
+    ):
+        if side_name == "favorite":
+            state.kalshi_favorite_ticker = ticker
+            state.kalshi_market_ticker = ticker
+            state.kalshi_yes_team = team
+            state.kalshi_yes_bid = bid
+            state.kalshi_yes_ask = ask
+            state.kalshi_last_price = last
+            state.kalshi_volume = volume
+            state.kalshi_open_interest = open_interest
+            state.kalshi_market_status = status
+            if bid is not None and ask is not None:
+                state.kalshi_bid_ask_spread = ask - bid
+            if depth is not None:
+                state.kalshi_book_depth = depth
+        else:
+            state.kalshi_underdog_ticker = ticker
+            state.kalshi_underdog_bid = bid
+            state.kalshi_underdog_ask = ask
+            state.kalshi_underdog_last_price = last
+            state.kalshi_underdog_volume = volume
+            state.kalshi_underdog_open_interest = open_interest
+            state.kalshi_underdog_market_status = status
+            if bid is not None and ask is not None:
+                state.kalshi_underdog_bid_ask_spread = ask - bid
+            if depth is not None:
+                state.kalshi_underdog_book_depth = depth
+
+    def _sync_favorite_contract_fields(self, state: LiveGameState):
+        """Preserve legacy fields as favorite-side aliases for existing strategies/UI."""
+        state.kalshi_market_ticker = state.kalshi_favorite_ticker
+        state.kalshi_yes_team = state.favorite
 
     # ─────────────────────────────────────────
     # Kalshi-Based Fallback (when BetStack/Odds API fail to match)

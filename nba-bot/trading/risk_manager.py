@@ -43,8 +43,11 @@ class RiskManager:
             Strategy.TIERED_CLASSIC: set(),
             Strategy.GARBAGE_TIME: set(),
             Strategy.CONSERVATIVE_HOLD: set(),
+            Strategy.CONSERVATIVE_HOLD_FLIP: set(),
             Strategy.TIERED_HOLD: set(),
+            Strategy.TIERED_HOLD_FLIP: set(),
             Strategy.TIERED_CLASSIC_HOLD: set(),
+            Strategy.TIERED_FLIP: set(),
             Strategy.PULSE: set(),
         }
 
@@ -55,8 +58,11 @@ class RiskManager:
             Strategy.TIERED_CLASSIC: False,
             Strategy.GARBAGE_TIME: False,
             Strategy.CONSERVATIVE_HOLD: False,
+            Strategy.CONSERVATIVE_HOLD_FLIP: False,
             Strategy.TIERED_HOLD: False,
+            Strategy.TIERED_HOLD_FLIP: False,
             Strategy.TIERED_CLASSIC_HOLD: False,
+            Strategy.TIERED_FLIP: False,
             Strategy.PULSE: False,
         }
         self.global_pause = False
@@ -67,8 +73,11 @@ class RiskManager:
             Strategy.TIERED_CLASSIC: TIER_CLASSIC_MAX_CONCURRENT_POSITIONS,
             Strategy.GARBAGE_TIME: GT_MAX_CONCURRENT_POSITIONS,
             Strategy.CONSERVATIVE_HOLD: CONS_MAX_CONCURRENT_POSITIONS,
+            Strategy.CONSERVATIVE_HOLD_FLIP: CONS_MAX_CONCURRENT_POSITIONS,
             Strategy.TIERED_HOLD: TIER_MAX_CONCURRENT_POSITIONS,
+            Strategy.TIERED_HOLD_FLIP: TIER_MAX_CONCURRENT_POSITIONS,
             Strategy.TIERED_CLASSIC_HOLD: TIER_CLASSIC_MAX_CONCURRENT_POSITIONS,
+            Strategy.TIERED_FLIP: TIER_MAX_CONCURRENT_POSITIONS,
             Strategy.PULSE: PULSE_MAX_CONCURRENT_POSITIONS,
         }
 

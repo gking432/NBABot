@@ -10,7 +10,7 @@ from datetime import datetime
 from core.models import (
     Position, EntryRecord, ExitRecord, EntrySignal, TradeRecord,
     LiveGameState, GameMode, PositionStatus, TradeAction,
-    Strategy, InjuryEvent, InjurySeverity, strategy_from_stored_value,
+    Strategy, InjuryEvent, InjurySeverity, strategy_from_stored_value, ContractSide,
 )
 from core.database import Database
 from data.injury_detector import InjuryDetector
@@ -34,8 +34,11 @@ class PositionManager:
         self.tiered_classic_positions: Dict[str, Position] = {}
         self.garbage_time_positions: Dict[str, Position] = {}
         self.conservative_hold_positions: Dict[str, Position] = {}
+        self.conservative_hold_flip_positions: Dict[str, Position] = {}
         self.tiered_hold_positions: Dict[str, Position] = {}
+        self.tiered_hold_flip_positions: Dict[str, Position] = {}
         self.tiered_classic_hold_positions: Dict[str, Position] = {}
+        self.tiered_flip_positions: Dict[str, Position] = {}
         self.pulse_positions: Dict[str, Position] = {}
 
         self._entry_locks: set = set()
@@ -47,8 +50,11 @@ class PositionManager:
             Strategy.TIERED_CLASSIC: 0,
             Strategy.GARBAGE_TIME: 0,
             Strategy.CONSERVATIVE_HOLD: 0,
+            Strategy.CONSERVATIVE_HOLD_FLIP: 0,
             Strategy.TIERED_HOLD: 0,
+            Strategy.TIERED_HOLD_FLIP: 0,
             Strategy.TIERED_CLASSIC_HOLD: 0,
+            Strategy.TIERED_FLIP: 0,
             Strategy.PULSE: 0,
         }
 
@@ -78,8 +84,11 @@ class PositionManager:
             f"TieredClassic={self.bankrolls[Strategy.TIERED_CLASSIC]}¢, "
             f"GarbageTime={self.bankrolls[Strategy.GARBAGE_TIME]}¢, "
             f"ConservativeHold={self.bankrolls[Strategy.CONSERVATIVE_HOLD]}¢, "
+            f"ConservativeHoldFlip={self.bankrolls[Strategy.CONSERVATIVE_HOLD_FLIP]}¢, "
             f"TieredHold={self.bankrolls[Strategy.TIERED_HOLD]}¢, "
+            f"TieredHoldFlip={self.bankrolls[Strategy.TIERED_HOLD_FLIP]}¢, "
             f"TieredClassicHold={self.bankrolls[Strategy.TIERED_CLASSIC_HOLD]}¢, "
+            f"TieredFlip={self.bankrolls[Strategy.TIERED_FLIP]}¢, "
             f"Pulse={self.bankrolls[Strategy.PULSE]}¢"
         )
 
@@ -92,8 +101,11 @@ class PositionManager:
             f"TieredClassic={self.bankrolls[Strategy.TIERED_CLASSIC]}¢, "
             f"GarbageTime={self.bankrolls[Strategy.GARBAGE_TIME]}¢, "
             f"ConservativeHold={self.bankrolls[Strategy.CONSERVATIVE_HOLD]}¢, "
+            f"ConservativeHoldFlip={self.bankrolls[Strategy.CONSERVATIVE_HOLD_FLIP]}¢, "
             f"TieredHold={self.bankrolls[Strategy.TIERED_HOLD]}¢, "
+            f"TieredHoldFlip={self.bankrolls[Strategy.TIERED_HOLD_FLIP]}¢, "
             f"TieredClassicHold={self.bankrolls[Strategy.TIERED_CLASSIC_HOLD]}¢, "
+            f"TieredFlip={self.bankrolls[Strategy.TIERED_FLIP]}¢, "
             f"Pulse={self.bankrolls[Strategy.PULSE]}¢"
         )
 
@@ -144,6 +156,7 @@ class PositionManager:
                 kalshi_ticker=pos_data.get("kalshi_ticker", ""),
                 team=pos_data.get("team", ""),
                 strategy=strategy,
+                contract_side=ContractSide.FAVORITE_YES,
             )
 
             # Rebuild entries from BUY trades
@@ -223,10 +236,16 @@ class PositionManager:
             return self.garbage_time_positions
         elif strategy == Strategy.CONSERVATIVE_HOLD:
             return self.conservative_hold_positions
+        elif strategy == Strategy.CONSERVATIVE_HOLD_FLIP:
+            return self.conservative_hold_flip_positions
         elif strategy == Strategy.TIERED_HOLD:
             return self.tiered_hold_positions
+        elif strategy == Strategy.TIERED_HOLD_FLIP:
+            return self.tiered_hold_flip_positions
         elif strategy == Strategy.TIERED_CLASSIC_HOLD:
             return self.tiered_classic_hold_positions
+        elif strategy == Strategy.TIERED_FLIP:
+            return self.tiered_flip_positions
         elif strategy == Strategy.PULSE:
             return self.pulse_positions
         return {}
@@ -237,8 +256,10 @@ class PositionManager:
         for positions in [
             self.conservative_positions, self.tiered_positions,
             self.tiered_classic_positions, self.garbage_time_positions,
-            self.conservative_hold_positions, self.tiered_hold_positions,
-            self.tiered_classic_hold_positions, self.pulse_positions,
+            self.conservative_hold_positions, self.conservative_hold_flip_positions,
+            self.tiered_hold_positions, self.tiered_hold_flip_positions,
+            self.tiered_classic_hold_positions, self.tiered_flip_positions,
+            self.pulse_positions,
         ]:
             all_pos.extend(p for p in positions.values() if p.is_active)
         return all_pos
@@ -283,13 +304,13 @@ class PositionManager:
                 return None
 
         # Safety: check liquidity
-        if state.kalshi_book_depth > 0:
-            consumption = signal.suggested_shares / state.kalshi_book_depth
+        if signal.orderbook_depth > 0:
+            consumption = signal.suggested_shares / signal.orderbook_depth
             if consumption > MAX_LIQUIDITY_CONSUMPTION_PCT:
                 logger.warning(
                     f"Would consume {consumption:.0%} of book depth — reducing size"
                 )
-                signal.suggested_shares = int(state.kalshi_book_depth * MAX_LIQUIDITY_CONSUMPTION_PCT)
+                signal.suggested_shares = int(signal.orderbook_depth * MAX_LIQUIDITY_CONSUMPTION_PCT)
                 signal.suggested_cost_cents = signal.suggested_shares * fill_price_cents
 
         if signal.suggested_shares < 1:
@@ -330,9 +351,10 @@ class PositionManager:
                 return None
             position = Position(
                 game_id=game_id,
-                kalshi_ticker=state.kalshi_market_ticker or "",
+                kalshi_ticker=signal.kalshi_ticker,
                 team=signal.team,
                 strategy=signal.strategy,
+                contract_side=signal.contract_side,
             )
             positions[game_id] = position
 
@@ -370,10 +392,10 @@ class PositionManager:
             game_score_home=state.home_score,
             game_score_away=state.away_score,
             deficit_vs_spread=state.deficit_vs_spread,
-            fair_value=state.fair_value_home,
-            edge=state.edge_conservative,
-            price_drop_pct=state.price_drop_from_tipoff,
-            orderbook_depth=state.kalshi_book_depth,
+            fair_value=signal.fair_value,
+            edge=signal.edge,
+            price_drop_pct=signal.price_drop_pct,
+            orderbook_depth=signal.orderbook_depth,
             game_mode=position.current_mode,
         )
         self.db.log_trade(trade)
@@ -455,6 +477,10 @@ class PositionManager:
             action = TradeAction.SELL_PARTIAL
 
         # Log trade
+        fair_value = state.get_fair_value_for_side(position.contract_side)
+        edge = state.get_edge_for_side(position.contract_side)
+        price_drop = state.get_price_drop_from_tipoff_for_side(position.contract_side)
+        orderbook_depth = state.get_book_depth_for_side(position.contract_side)
         trade = TradeRecord(
             position_id=position.position_id,
             game_id=position.game_id,
@@ -472,10 +498,10 @@ class PositionManager:
             game_score_home=state.home_score,
             game_score_away=state.away_score,
             deficit_vs_spread=state.deficit_vs_spread,
-            fair_value=state.fair_value_home,
-            edge=state.edge_conservative,
-            price_drop_pct=state.price_drop_from_tipoff,
-            orderbook_depth=state.kalshi_book_depth,
+            fair_value=fair_value,
+            edge=edge,
+            price_drop_pct=price_drop,
+            orderbook_depth=orderbook_depth,
             game_mode=position.current_mode,
         )
         self.db.log_trade(trade)
@@ -501,8 +527,11 @@ class PositionManager:
             self.tiered_classic_positions,
             self.garbage_time_positions,
             self.conservative_hold_positions,
+            self.conservative_hold_flip_positions,
             self.tiered_hold_positions,
+            self.tiered_hold_flip_positions,
             self.tiered_classic_hold_positions,
+            self.tiered_flip_positions,
             self.pulse_positions,
         ]:
 
@@ -607,8 +636,11 @@ class PositionManager:
             (self.tiered_classic_positions, "tiered_classic"),
             (self.garbage_time_positions, "garbage_time"),
             (self.conservative_hold_positions, "conservative_hold"),
+            (self.conservative_hold_flip_positions, "conservative_hold_flip"),
             (self.tiered_hold_positions, "tiered_hold"),
+            (self.tiered_hold_flip_positions, "tiered_hold_flip"),
             (self.tiered_classic_hold_positions, "tiered_classic_hold"),
+            (self.tiered_flip_positions, "tiered_flip"),
             (self.pulse_positions, "pulse"),
         ]:
             if state.game_id_espn not in positions_dict:
@@ -635,7 +667,7 @@ class PositionManager:
                     )
 
                     # Sell 50% immediately
-                    current_price = state.kalshi_yes_ask or state.kalshi_last_price or 1
+                    current_price = state.get_ask_for_side(position.contract_side) or state.get_last_price_for_side(position.contract_side) or 1
                     shares_to_sell = position.shares_remaining // 2
 
                     if shares_to_sell > 0:

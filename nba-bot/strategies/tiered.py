@@ -77,10 +77,10 @@ class TieredStrategy(BaseStrategy):
             return None
         if state.deficit_vs_spread < TIER_MIN_DEFICIT_VS_SPREAD:
             return None
-        ask_price = state.kalshi_yes_ask
+        ask_price = self.get_entry_price(state)
         if ask_price is None or ask_price > TIER_MAX_ENTRY_PRICE_CENTS:
             return None
-        if state.kalshi_book_depth < TIER_MIN_BOOK_DEPTH:
+        if self.get_book_depth(state) < TIER_MIN_BOOK_DEPTH:
             return None
 
         game_budget = int(self.bankroll_cents * TIER_GAME_BUDGET_PCT)
@@ -90,7 +90,8 @@ class TieredStrategy(BaseStrategy):
             return None
 
         confidence = 65
-        if state.price_drop_from_tipoff >= 0.40:
+        price_drop = self.get_price_drop(state)
+        if price_drop >= 0.40:
             confidence = 75
         if state.deficit_vs_spread >= 15:
             confidence = 80
@@ -99,7 +100,7 @@ class TieredStrategy(BaseStrategy):
         reason = (
             f"Tiered Entry 1 ({regime}): spread={state.opening_spread}, "
             f"deficit={state.deficit_vs_spread:.1f}, "
-            f"price_drop={state.price_drop_from_tipoff:.0%}, "
+            f"price_drop={price_drop:.0%}, "
             f"price={ask_price}¢, "
             f"Q{state.quarter} {state.time_remaining_seconds // 60}:{state.time_remaining_seconds % 60:02d}"
         )
@@ -140,7 +141,7 @@ class TieredStrategy(BaseStrategy):
         if not last_entry:
             return None
 
-        ask_price = state.kalshi_yes_ask
+        ask_price = self.get_entry_price(state)
         if ask_price is None:
             return None
 
@@ -167,7 +168,7 @@ class TieredStrategy(BaseStrategy):
             return None
 
         min_depth = TIER_ENTRY2_Q3_MIN_BOOK_DEPTH if (next_entry == 2 and state.quarter == 3) else TIER_MIN_BOOK_DEPTH
-        if state.kalshi_book_depth < min_depth:
+        if self.get_book_depth(state) < min_depth:
             return None
 
         if next_entry == 2:
@@ -223,7 +224,7 @@ class TieredStrategy(BaseStrategy):
         return None
 
     def check_exit(self, state: LiveGameState, position: Position) -> Optional[dict]:
-        current_price = state.kalshi_yes_ask or state.kalshi_last_price
+        current_price = self.get_current_price(state)
         if current_price is None or current_price == 0:
             return None
         if position.shares_remaining <= 0:

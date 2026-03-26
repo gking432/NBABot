@@ -22,8 +22,11 @@ class Strategy(str, Enum):
     TIERED_CLASSIC = "TIERED_CLASSIC"
     GARBAGE_TIME = "GARBAGE_TIME"
     CONSERVATIVE_HOLD = "CONSERVATIVE_HOLD"
+    CONSERVATIVE_HOLD_FLIP = "CONSERVATIVE_HOLD_FLIP"
     TIERED_HOLD = "TIERED_HOLD"
+    TIERED_HOLD_FLIP = "TIERED_HOLD_FLIP"
     TIERED_CLASSIC_HOLD = "TIERED_CLASSIC_HOLD"
+    TIERED_FLIP = "TIERED_FLIP"
     PULSE = "PULSE"
 
 
@@ -56,6 +59,11 @@ class GameMode(str, Enum):
     OFFENSIVE = "OFFENSIVE"      # Q1-Q2: all entries allowed, wide stops
     NEUTRAL = "NEUTRAL"          # Early Q3: hold, monitor, no entries
     DEFENSIVE = "DEFENSIVE"      # Late Q3-Q4 when underwater: sell into strength
+
+
+class ContractSide(str, Enum):
+    FAVORITE_YES = "FAVORITE_YES"
+    UNDERDOG_YES = "UNDERDOG_YES"
 
 
 class PositionStatus(str, Enum):
@@ -101,6 +109,8 @@ class LiveGameState:
     kalshi_event_ticker: Optional[str] = None
     kalshi_market_ticker: Optional[str] = None
     kalshi_yes_team: Optional[str] = None
+    kalshi_favorite_ticker: Optional[str] = None
+    kalshi_underdog_ticker: Optional[str] = None
 
     # Teams (canonical names from team_names.py)
     home_team: str = ""
@@ -136,6 +146,16 @@ class LiveGameState:
     kalshi_book_depth: int = 0                    # Contracts available in top 5 ask levels
     kalshi_bid_ask_spread: int = 0
     kalshi_market_status: str = ""                # "open", "closed", etc.
+    kalshi_underdog_bid: Optional[int] = None
+    kalshi_underdog_ask: Optional[int] = None
+    kalshi_underdog_last_price: Optional[int] = None
+    kalshi_underdog_volume: int = 0
+    kalshi_underdog_open_interest: int = 0
+    kalshi_underdog_opening_price: Optional[int] = None
+    kalshi_underdog_tipoff_price: Optional[int] = None
+    kalshi_underdog_book_depth: int = 0
+    kalshi_underdog_bid_ask_spread: int = 0
+    kalshi_underdog_market_status: str = ""
 
     # Derived Signals (calculated by aggregator)
     deficit_vs_spread: float = 0.0           # Always positive: how much worse than expected
@@ -190,6 +210,83 @@ class LiveGameState:
     def is_overtime(self) -> bool:
         return self.quarter >= 5
 
+    def get_ticker_for_side(self, side: ContractSide) -> Optional[str]:
+        if side == ContractSide.UNDERDOG_YES:
+            return self.kalshi_underdog_ticker
+        return self.kalshi_favorite_ticker or self.kalshi_market_ticker
+
+    def get_team_for_side(self, side: ContractSide) -> str:
+        if side == ContractSide.UNDERDOG_YES:
+            return self.underdog
+        return self.favorite
+
+    def get_ask_for_side(self, side: ContractSide) -> Optional[int]:
+        if side == ContractSide.UNDERDOG_YES:
+            return self.kalshi_underdog_ask
+        return self.kalshi_yes_ask
+
+    def get_bid_for_side(self, side: ContractSide) -> Optional[int]:
+        if side == ContractSide.UNDERDOG_YES:
+            return self.kalshi_underdog_bid
+        return self.kalshi_yes_bid
+
+    def get_last_price_for_side(self, side: ContractSide) -> Optional[int]:
+        if side == ContractSide.UNDERDOG_YES:
+            return self.kalshi_underdog_last_price
+        return self.kalshi_last_price
+
+    def get_book_depth_for_side(self, side: ContractSide) -> int:
+        if side == ContractSide.UNDERDOG_YES:
+            return self.kalshi_underdog_book_depth
+        return self.kalshi_book_depth
+
+    def get_bid_ask_spread_for_side(self, side: ContractSide) -> int:
+        if side == ContractSide.UNDERDOG_YES:
+            return self.kalshi_underdog_bid_ask_spread
+        return self.kalshi_bid_ask_spread
+
+    def get_market_status_for_side(self, side: ContractSide) -> str:
+        if side == ContractSide.UNDERDOG_YES:
+            return self.kalshi_underdog_market_status
+        return self.kalshi_market_status
+
+    def get_opening_price_for_side(self, side: ContractSide) -> Optional[int]:
+        if side == ContractSide.UNDERDOG_YES:
+            return self.kalshi_underdog_opening_price
+        return self.kalshi_opening_price
+
+    def get_tipoff_price_for_side(self, side: ContractSide) -> Optional[int]:
+        if side == ContractSide.UNDERDOG_YES:
+            return self.kalshi_underdog_tipoff_price
+        return self.kalshi_tipoff_price
+
+    def get_fair_value_for_side(self, side: ContractSide) -> Optional[float]:
+        if side == ContractSide.UNDERDOG_YES:
+            if self.underdog == self.home_team:
+                return self.fair_value_home
+            if self.underdog == self.away_team:
+                return self.fair_value_away
+            return self.fair_value_away
+        if self.favorite == self.home_team:
+            return self.fair_value_home
+        if self.favorite == self.away_team:
+            return self.fair_value_away
+        return self.fair_value_home
+
+    def get_edge_for_side(self, side: ContractSide) -> Optional[float]:
+        ask = self.get_ask_for_side(side)
+        fair_value = self.get_fair_value_for_side(side)
+        if ask is None or fair_value is None:
+            return None
+        return fair_value - (ask / 100.0)
+
+    def get_price_drop_from_tipoff_for_side(self, side: ContractSide) -> float:
+        tipoff = self.get_tipoff_price_for_side(side)
+        current = self.get_ask_for_side(side)
+        if not tipoff or current is None or tipoff <= 0:
+            return 0.0
+        return max(0.0, (tipoff - current) / tipoff)
+
 
 @dataclass
 class EntryRecord:
@@ -228,6 +325,7 @@ class Position:
     kalshi_ticker: str = ""
     team: str = ""
     strategy: Strategy = Strategy.TIERED
+    contract_side: ContractSide = ContractSide.FAVORITE_YES
 
     # Entry tracking
     entries: List[EntryRecord] = field(default_factory=list)
@@ -344,6 +442,8 @@ class EntrySignal:
     game_id: str = ""
     team: str = ""
     strategy: Strategy = Strategy.TIERED
+    kalshi_ticker: str = ""
+    contract_side: ContractSide = ContractSide.FAVORITE_YES
     entry_number: int = 1
 
     # Why we're entering

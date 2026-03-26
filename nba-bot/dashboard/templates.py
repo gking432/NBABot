@@ -29,8 +29,11 @@ def render_dashboard() -> str:
             --tiered-classic: #ab47bc;
             --heavy: #ffa726;
             --conservative-hold: #26c6da;
+            --conservative-hold-flip: #00838f;
             --tiered-hold: #9ccc65;
+            --tiered-hold-flip: #558b2f;
             --tiered-classic-hold: #ce93d8;
+            --tiered-flip: #2e7d32;
             --pulse: #ff5252;
             --positive: #1f9d55;
             --negative: #d14343;
@@ -73,8 +76,11 @@ def render_dashboard() -> str:
         .signal-dot.tiered-classic { background: var(--tiered-classic); }
         .signal-dot.heavy { background: var(--heavy); }
         .signal-dot.conservative-hold { background: var(--conservative-hold); }
+        .signal-dot.conservative-hold-flip { background: var(--conservative-hold-flip); }
         .signal-dot.tiered-hold { background: var(--tiered-hold); }
+        .signal-dot.tiered-hold-flip { background: var(--tiered-hold-flip); }
         .signal-dot.tiered-classic-hold { background: var(--tiered-classic-hold); }
+        .signal-dot.tiered-flip { background: var(--tiered-flip); }
         .signal-dot.pulse { background: var(--pulse); }
         .tab-nav {
             display: flex; gap: 6px; padding: 10px 20px; background: var(--surface);
@@ -100,8 +106,11 @@ def render_dashboard() -> str:
         .strategy-card.tiered-classic .card-header { color: var(--tiered-classic); }
         .strategy-card.heavy .card-header { color: var(--heavy); }
         .strategy-card.conservative-hold .card-header { color: var(--conservative-hold); }
+        .strategy-card.conservative-hold-flip .card-header { color: var(--conservative-hold-flip); }
         .strategy-card.tiered-hold .card-header { color: var(--tiered-hold); }
+        .strategy-card.tiered-hold-flip .card-header { color: var(--tiered-hold-flip); }
         .strategy-card.tiered-classic-hold .card-header { color: var(--tiered-classic-hold); }
+        .strategy-card.tiered-flip .card-header { color: var(--tiered-flip); }
         .strategy-card.pulse .card-header { color: var(--pulse); }
         .overview-grid { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr); gap: 20px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -285,8 +294,11 @@ def render_dashboard() -> str:
         <button class="tab-btn" data-tab="tieredClassic">Tiered Classic</button>
         <button class="tab-btn" data-tab="bounceback">Bounceback</button>
         <button class="tab-btn" data-tab="conservativeHold">Conservative Hold</button>
+        <button class="tab-btn" data-tab="conservativeHoldFlip">Conservative Hold Flip</button>
         <button class="tab-btn" data-tab="tieredHold">Tiered Hold</button>
+        <button class="tab-btn" data-tab="tieredHoldFlip">Tiered Hold Flip</button>
         <button class="tab-btn" data-tab="tieredClassicHold">Tiered Classic Hold</button>
+        <button class="tab-btn" data-tab="tieredFlip">Tiered Flip</button>
         <button class="tab-btn" data-tab="pulse">Pulse</button>
         <button class="tab-btn" data-tab="comparison">Comparison</button>
         <button class="tab-btn" data-tab="signals">Signal Log</button>
@@ -299,8 +311,11 @@ def render_dashboard() -> str:
     <div id="tabTieredClassic" class="tab-content"></div>
     <div id="tabBounceback" class="tab-content"></div>
     <div id="tabConservativeHold" class="tab-content"></div>
+    <div id="tabConservativeHoldFlip" class="tab-content"></div>
     <div id="tabTieredHold" class="tab-content"></div>
+    <div id="tabTieredHoldFlip" class="tab-content"></div>
     <div id="tabTieredClassicHold" class="tab-content"></div>
+    <div id="tabTieredFlip" class="tab-content"></div>
     <div id="tabPulse" class="tab-content"></div>
     <div id="tabComparison" class="tab-content"></div>
     <div id="tabSignals" class="tab-content"></div>
@@ -313,14 +328,18 @@ def render_dashboard() -> str:
             tieredClassic: '#ab47bc',
             heavy: '#ffa726',
             conservativeHold: '#26c6da',
+            conservativeHoldFlip: '#00838f',
             tieredHold: '#9ccc65',
+            tieredHoldFlip: '#558b2f',
             tieredClassicHold: '#ce93d8',
+            tieredFlip: '#2e7d32',
             pulse: '#ff5252'
         };
         const STRATEGIES = [
             'CONSERVATIVE', 'TIERED', 'TIERED_CLASSIC', 'GARBAGE_TIME',
-            'CONSERVATIVE_HOLD', 'TIERED_HOLD', 'TIERED_CLASSIC_HOLD',
-            'PULSE'
+            'CONSERVATIVE_HOLD', 'CONSERVATIVE_HOLD_FLIP',
+            'TIERED_HOLD', 'TIERED_HOLD_FLIP', 'TIERED_CLASSIC_HOLD',
+            'TIERED_FLIP', 'PULSE'
         ];
         const STRATEGY_LABELS = {
             CONSERVATIVE: 'Conservative',
@@ -329,8 +348,11 @@ def render_dashboard() -> str:
             GARBAGE_TIME: 'Bounceback',
             HEAVY_FAVORITE: 'Bounceback',
             CONSERVATIVE_HOLD: 'Conservative Hold',
+            CONSERVATIVE_HOLD_FLIP: 'Conservative Hold Flip',
             TIERED_HOLD: 'Tiered Hold',
+            TIERED_HOLD_FLIP: 'Tiered Hold Flip',
             TIERED_CLASSIC_HOLD: 'Tiered Classic Hold',
+            TIERED_FLIP: 'Tiered Flip',
             PULSE: 'Pulse'
         };
         function canonicalStrategy(strat) {
@@ -623,8 +645,11 @@ def render_dashboard() -> str:
                     updateTabTieredClassic(trades || [], positions || [], stats.TIERED_CLASSIC || {});
                     updateTabBounceback(trades || [], positions || [], stats.GARBAGE_TIME || {});
                     updateTabConservativeHold(trades || [], positions || [], stats.CONSERVATIVE_HOLD || {});
+                    updateTabConservativeHoldFlip(trades || [], positions || [], stats.CONSERVATIVE_HOLD_FLIP || {});
                     updateTabTieredHold(trades || [], positions || [], stats.TIERED_HOLD || {});
+                    updateTabTieredHoldFlip(trades || [], positions || [], stats.TIERED_HOLD_FLIP || {});
                     updateTabTieredClassicHold(trades || [], positions || [], stats.TIERED_CLASSIC_HOLD || {});
+                    updateTabTieredFlip(trades || [], positions || [], stats.TIERED_FLIP || {});
                     updateTabPulse(trades || [], positions || [], stats.PULSE || {});
                     updateTabComparison(trades || [], stats);
                     updateTabSignals(signals || []);
@@ -684,7 +709,7 @@ def render_dashboard() -> str:
                 let borderClass = '';
                 if (pos) {
                     const cost = pos.total_cost_cents || 0;
-                    const bid = g.kalshi_bid || 0;
+                    const bid = pos.current_bid_cents ?? g.kalshi_bid ?? 0;
                     const val = (pos.shares_remaining || 0) * bid;
                     borderClass = val > cost ? 'profit' : 'loss';
                 }
@@ -747,8 +772,18 @@ def render_dashboard() -> str:
                 targets.push({ label: 'TP1 (+30%)', price: Math.round(avg * 1.30), hit: pos.capital_recovered });
                 targets.push({ label: 'TP2 (50¢)', price: 50, hit: false });
                 targets.push({ label: 'Stop (-35%, 6m hold)', price: Math.round(avg * 0.65), hit: false });
-            } else if (strat === 'CONSERVATIVE_HOLD' || strat === 'TIERED_HOLD' || strat === 'TIERED_CLASSIC_HOLD') {
+            } else if (strat === 'CONSERVATIVE_HOLD' || strat === 'CONSERVATIVE_HOLD_FLIP' || strat === 'TIERED_HOLD' || strat === 'TIERED_HOLD_FLIP' || strat === 'TIERED_CLASSIC_HOLD') {
                 targets.push({ label: 'Settlement (100¢)', price: 100, hit: false });
+            } else if (strat === 'TIERED_FLIP') {
+                if ((pos.entry_count || 0) >= 3) {
+                    targets.push({ label: 'Recovery Exit (breakeven)', price: Math.round(avg), hit: false });
+                    targets.push({ label: 'Recovery Stop (-50%)', price: Math.round(avg * 0.5), hit: false });
+                } else if (avg < 30) {
+                    targets.push({ label: 'TP1 (+17.5%)', price: Math.round(avg * 1.175), hit: pos.capital_recovered });
+                    targets.push({ label: 'TP2 (40¢)', price: 40, hit: false });
+                } else {
+                    targets.push({ label: 'TP (48¢)', price: 48, hit: false });
+                }
             } else if (strat === 'PULSE') {
                 targets.push({ label: 'TP1 (+12%)', price: Math.round(avg * 1.12), hit: false });
                 targets.push({ label: 'TP2 (+25%)', price: Math.round(avg * 1.25), hit: false });
@@ -762,8 +797,11 @@ def render_dashboard() -> str:
             if (strat === 'TIERED_CLASSIC') return 'tiered-classic';
             if (canonicalStrategy(strat) === 'GARBAGE_TIME') return 'heavy';
             if (strat === 'CONSERVATIVE_HOLD') return 'conservative-hold';
+            if (strat === 'CONSERVATIVE_HOLD_FLIP') return 'conservative-hold-flip';
             if (strat === 'TIERED_HOLD') return 'tiered-hold';
+            if (strat === 'TIERED_HOLD_FLIP') return 'tiered-hold-flip';
             if (strat === 'TIERED_CLASSIC_HOLD') return 'tiered-classic-hold';
+            if (strat === 'TIERED_FLIP') return 'tiered-flip';
             if (strat === 'PULSE') return 'pulse';
             return 'conservative';
         }
@@ -774,8 +812,11 @@ def render_dashboard() -> str:
             if (strat === 'TIERED_CLASSIC') return 'var(--tiered-classic)';
             if (canonicalStrategy(strat) === 'GARBAGE_TIME') return 'var(--heavy)';
             if (strat === 'CONSERVATIVE_HOLD') return 'var(--conservative-hold)';
+            if (strat === 'CONSERVATIVE_HOLD_FLIP') return 'var(--conservative-hold-flip)';
             if (strat === 'TIERED_HOLD') return 'var(--tiered-hold)';
+            if (strat === 'TIERED_HOLD_FLIP') return 'var(--tiered-hold-flip)';
             if (strat === 'TIERED_CLASSIC_HOLD') return 'var(--tiered-classic-hold)';
+            if (strat === 'TIERED_FLIP') return 'var(--tiered-flip)';
             if (strat === 'PULSE') return 'var(--pulse)';
             return 'var(--text)';
         }
@@ -797,7 +838,7 @@ def render_dashboard() -> str:
                 html += '<div class="strategy-cards">';
                 activePositions.forEach(pos => {
                     const game = gamesById[pos.game_id];
-                    const currentPrice = game ? (game.kalshi_bid || game.kalshi_ask || game.kalshi_last || 0) : 0;
+                    const currentPrice = pos.current_bid_cents ?? pos.current_ask_cents ?? (game ? (game.kalshi_bid || game.kalshi_ask || game.kalshi_last || 0) : 0);
                     const avg = pos.avg_cost_cents || 0;
                     const shares = pos.shares_remaining || 0;
                     const remainingCost = Math.round(shares * avg);
@@ -873,7 +914,7 @@ def render_dashboard() -> str:
                 let totalCost = 0;
                 const posData = activePositions.map(pos => {
                     const game = gamesByIdOP[pos.game_id];
-                    const currentPrice = game ? (game.kalshi_bid || game.kalshi_ask || game.kalshi_last || 0) : 0;
+                    const currentPrice = pos.current_bid_cents ?? pos.current_ask_cents ?? (game ? (game.kalshi_bid || game.kalshi_ask || game.kalshi_last || 0) : 0);
                     const avg = pos.avg_cost_cents || 0;
                     const shares = pos.shares_remaining || 0;
                     const remainingCost = Math.round(shares * avg);
@@ -989,8 +1030,11 @@ def render_dashboard() -> str:
                         else if (s === 'TIERED_CLASSIC') color = COLORS.tieredClassic;
                         else if (s === 'GARBAGE_TIME') color = COLORS.heavy;
                         else if (s === 'CONSERVATIVE_HOLD') color = COLORS.conservativeHold;
+                        else if (s === 'CONSERVATIVE_HOLD_FLIP') color = COLORS.conservativeHoldFlip;
                         else if (s === 'TIERED_HOLD') color = COLORS.tieredHold;
+                        else if (s === 'TIERED_HOLD_FLIP') color = COLORS.tieredHoldFlip;
                         else if (s === 'TIERED_CLASSIC_HOLD') color = COLORS.tieredClassicHold;
+                        else if (s === 'TIERED_FLIP') color = COLORS.tieredFlip;
                         else if (s === 'PULSE') color = COLORS.pulse;
                         return {
                             label: STRATEGY_LABELS[s] || s,
@@ -1325,12 +1369,24 @@ def render_dashboard() -> str:
             updateTabSimpleStrategy(trades, positions, st, 'CONSERVATIVE_HOLD', 'Conservative Hold', COLORS.conservativeHold);
         }
 
+        function updateTabConservativeHoldFlip(trades, positions, st) {
+            updateTabSimpleStrategy(trades, positions, st, 'CONSERVATIVE_HOLD_FLIP', 'Conservative Hold Flip', COLORS.conservativeHoldFlip);
+        }
+
         function updateTabTieredHold(trades, positions, st) {
             updateTabSimpleStrategy(trades, positions, st, 'TIERED_HOLD', 'Tiered Hold', COLORS.tieredHold);
         }
 
+        function updateTabTieredHoldFlip(trades, positions, st) {
+            updateTabSimpleStrategy(trades, positions, st, 'TIERED_HOLD_FLIP', 'Tiered Hold Flip', COLORS.tieredHoldFlip);
+        }
+
         function updateTabTieredClassicHold(trades, positions, st) {
             updateTabSimpleStrategy(trades, positions, st, 'TIERED_CLASSIC_HOLD', 'Tiered Classic Hold', COLORS.tieredClassicHold);
+        }
+
+        function updateTabTieredFlip(trades, positions, st) {
+            updateTabSimpleStrategy(trades, positions, st, 'TIERED_FLIP', 'Tiered Flip', COLORS.tieredFlip);
         }
 
         function updateTabPulse(trades, positions, st) {

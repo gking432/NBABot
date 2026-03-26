@@ -10,6 +10,7 @@ from datetime import datetime
 from core.models import (
     LiveGameState, EntrySignal, Position, GameMode,
     GameStatus, Strategy, PositionStatus
+    , ContractSide
 )
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class BaseStrategy(ABC):
         # Shared positions dict: {game_id: Position}
         # Managed by PositionManager, passed in by reference
         self.positions = positions
+        self.contract_side = ContractSide.FAVORITE_YES
 
     @abstractmethod
     def check_entry(self, state: LiveGameState) -> Optional[EntrySignal]:
@@ -78,7 +80,7 @@ class BaseStrategy(ABC):
                 return GameMode.NEUTRAL
 
         # Late Q3 or Q4: defensive if underwater
-        current_price = state.kalshi_yes_ask or state.kalshi_last_price or 0
+        current_price = self.get_current_price(state) or 0
         if current_price > 0 and position.current_return_pct(current_price) < 0:
             return GameMode.DEFENSIVE
 
@@ -94,15 +96,15 @@ class BaseStrategy(ABC):
             return False
 
         # Must have Kalshi data
-        if state.kalshi_yes_ask is None:
+        if self.get_entry_price(state) is None:
             return False
 
         # Must have Kalshi market matched
-        if not state.kalshi_market_ticker:
+        if not self.get_kalshi_ticker(state):
             return False
 
         # Market must be open
-        if state.kalshi_market_status not in ("open", "active", ""):
+        if self.get_market_status(state) not in ("open", "active", ""):
             return False
 
         # No trading in final 2 minutes
@@ -110,6 +112,39 @@ class BaseStrategy(ABC):
             return False
 
         return True
+
+    def get_contract_side(self) -> ContractSide:
+        return self.contract_side
+
+    def get_team(self, state: LiveGameState) -> str:
+        return state.get_team_for_side(self.contract_side)
+
+    def get_kalshi_ticker(self, state: LiveGameState) -> Optional[str]:
+        return state.get_ticker_for_side(self.contract_side)
+
+    def get_entry_price(self, state: LiveGameState) -> Optional[int]:
+        return state.get_ask_for_side(self.contract_side)
+
+    def get_current_price(self, state: LiveGameState) -> Optional[int]:
+        return state.get_ask_for_side(self.contract_side) or state.get_last_price_for_side(self.contract_side)
+
+    def get_book_depth(self, state: LiveGameState) -> int:
+        return state.get_book_depth_for_side(self.contract_side)
+
+    def get_bid_ask_spread(self, state: LiveGameState) -> int:
+        return state.get_bid_ask_spread_for_side(self.contract_side)
+
+    def get_market_status(self, state: LiveGameState) -> str:
+        return state.get_market_status_for_side(self.contract_side)
+
+    def get_fair_value(self, state: LiveGameState) -> Optional[float]:
+        return state.get_fair_value_for_side(self.contract_side)
+
+    def get_edge(self, state: LiveGameState) -> Optional[float]:
+        return state.get_edge_for_side(self.contract_side)
+
+    def get_price_drop(self, state: LiveGameState) -> float:
+        return state.get_price_drop_from_tipoff_for_side(self.contract_side)
 
     def build_signal(
         self,
@@ -124,14 +159,16 @@ class BaseStrategy(ABC):
         """Create an EntrySignal with all context filled in."""
         return EntrySignal(
             game_id=state.game_id_espn,
-            team=state.favorite,  # Usually betting on the favorite
+            team=self.get_team(state),
             strategy=self.name,
+            kalshi_ticker=self.get_kalshi_ticker(state) or "",
+            contract_side=self.contract_side,
             entry_number=entry_number,
-            kalshi_price_cents=state.kalshi_yes_ask or 0,
-            fair_value=state.fair_value_home,
-            edge=state.edge_conservative,
+            kalshi_price_cents=self.get_entry_price(state) or 0,
+            fair_value=self.get_fair_value(state),
+            edge=self.get_edge(state),
             deficit_vs_spread=state.deficit_vs_spread,
-            price_drop_pct=state.price_drop_from_tipoff,
+            price_drop_pct=self.get_price_drop(state),
             pre_game_spread=state.opening_spread,
             quarter=state.quarter,
             time_remaining_seconds=state.time_remaining_seconds,
@@ -140,7 +177,7 @@ class BaseStrategy(ABC):
             suggested_shares=suggested_shares,
             suggested_cost_cents=suggested_cost_cents,
             budget_source=budget_source,
-            orderbook_depth=state.kalshi_book_depth,
-            bid_ask_spread_cents=state.kalshi_bid_ask_spread,
+            orderbook_depth=self.get_book_depth(state),
+            bid_ask_spread_cents=self.get_bid_ask_spread(state),
             reason=reason,
         )

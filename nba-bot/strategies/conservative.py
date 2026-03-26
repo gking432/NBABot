@@ -72,20 +72,20 @@ class ConservativeStrategy(BaseStrategy):
         elif state.opening_spread <= 7:
             edge_threshold = CONS_MID_MIN_EDGE_PCT
 
-        if state.edge_conservative is None or state.edge_conservative < edge_threshold:
+        edge = self.get_edge(state)
+        if edge is None or edge < edge_threshold:
             return None
 
         # 5. Kalshi ask price <= 35¢
-        ask_price = state.kalshi_yes_ask
+        ask_price = self.get_entry_price(state)
         if ask_price is None or ask_price > CONS_MAX_ENTRY_PRICE_CENTS:
             return None
 
         # 6. Order book depth >= 100
-        if state.kalshi_book_depth < CONS_MIN_BOOK_DEPTH:
+        if self.get_book_depth(state) < CONS_MIN_BOOK_DEPTH:
             return None
 
         # ─── SIZING ───
-        edge = state.edge_conservative
         if edge >= 0.12:
             size_pct = CONS_SIZE_EDGE_12_PLUS
             confidence = 85
@@ -102,9 +102,10 @@ class ConservativeStrategy(BaseStrategy):
         if shares < 1:
             return None
 
+        fair_value = self.get_fair_value(state) or 0.0
         reason = (
             f"Conservative entry: edge={edge:.1%} (min {edge_threshold:.1%}), deficit_vs_spread={state.deficit_vs_spread:.1f}, "
-            f"price={ask_price}¢, fair_value={state.fair_value_home:.3f}, "
+            f"price={ask_price}¢, fair_value={fair_value:.3f}, "
             f"Q{state.quarter} {state.time_remaining_seconds // 60}:{state.time_remaining_seconds % 60:02d}"
         )
 
@@ -123,7 +124,7 @@ class ConservativeStrategy(BaseStrategy):
         Check all exit conditions for a conservative position.
         Returns: {action: "SELL_PARTIAL"|"SELL_ALL", shares: int, reason: str} or None
         """
-        current_price = state.kalshi_yes_ask or state.kalshi_last_price
+        current_price = self.get_current_price(state)
         if current_price is None or current_price == 0:
             return None
 
